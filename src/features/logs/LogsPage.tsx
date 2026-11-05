@@ -158,7 +158,7 @@ export function LogsPage() {
         {state.status === "loading" && <p className="py-6 text-center text-sm text-muted">Loading activity…</p>}
         {state.status === "offline" && (
           <p className="py-6 text-center text-sm text-muted">
-            Activity is only available inside the RoALT Advanced window.
+            Activity is only available inside the Nexora window.
           </p>
         )}
         {state.status === "error" && (

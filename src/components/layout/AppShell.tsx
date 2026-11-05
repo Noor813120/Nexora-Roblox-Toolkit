@@ -19,7 +19,7 @@ export function AppShell() {
   const firstRender = useRef(true);
 
   useEffect(() => {
-    document.title = `${route.label} · RoALT Advanced`;
+    document.title = `${route.label} · Nexora`;
     if (firstRender.current) {
       firstRender.current = false;
       return;

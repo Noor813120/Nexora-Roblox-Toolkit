@@ -35,14 +35,14 @@ describe("DatabaseBanner", () => {
         database_status: () => ({
           ...DB_STATUS,
           available: false,
-          error: "This database was created by a newer version of RoALT Advanced. Update the app to use it. Nothing was changed.",
+          error: "This database was created by a newer version of Nexora. Update the app to use it. Nothing was changed.",
         }),
       }),
     );
     render(<DatabaseBanner />);
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Saved data is unavailable");
-    expect(alert).toHaveTextContent("newer version of RoALT Advanced");
+    expect(alert).toHaveTextContent("newer version of Nexora");
   });
 
   it("tells the user a damaged database was replaced, names the preserved file, and can be dismissed", async () => {

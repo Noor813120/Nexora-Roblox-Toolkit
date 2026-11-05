@@ -1,7 +1,7 @@
 // Hides the extra console window on Windows release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! RoALT Advanced backend.
+//! Nexora backend.
 //!
 //! Rust owns every Windows process operation, task and sensitive action; the React frontend only
 //! presents state and sends typed commands. See `docs/ARCHITECTURE.md`.
@@ -56,7 +56,7 @@ fn main() {
             commands::database::restore_database,
         ])
         .build(tauri::generate_context!())
-        .expect("error while building RoALT Advanced");
+        .expect("error while building Nexora");
 
     app.run(|handle, event| {
         // Flush the write-ahead log so the database file on disk is complete when the app closes.

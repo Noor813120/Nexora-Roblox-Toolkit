@@ -1,4 +1,4 @@
-import { memo } from "react";
+﻿import { memo } from "react";
 import { hrefFor, NAV_ITEMS, type NavItem, type RouteId } from "../../app/navigation";
 
 const NavLink = memo(function NavLink({ item, active }: { item: NavItem; active: boolean }) {
@@ -22,7 +22,7 @@ export const Sidebar = memo(function Sidebar({ current }: { current: RouteId }) 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-line bg-surface">
       <div className="px-5 py-5">
-        <p className="text-sm font-semibold tracking-wide">RoALT Advanced</p>
+        <p className="text-sm font-semibold tracking-wide">Nexora</p>
       </div>
       <nav aria-label="Main" className="flex-1 px-3">
         <ul className="space-y-0.5">

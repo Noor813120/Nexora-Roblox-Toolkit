@@ -20,7 +20,7 @@ export function mockTauri(handlers: Record<string, Handler>) {
 
 export const GIB = 1024 ** 3;
 
-export const APP_INFO = { name: "RoALT Advanced", version: "0.1.0", platform: "windows", arch: "x86_64" };
+export const APP_INFO = { name: "Nexora", version: "0.1.0", platform: "windows", arch: "x86_64" };
 
 export const SYSTEM_INFO = {
   logicalCores: 8,

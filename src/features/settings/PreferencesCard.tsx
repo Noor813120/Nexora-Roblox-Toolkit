@@ -91,7 +91,7 @@ export function PreferencesCard() {
     <Card title="Preferences">
       {state.status === "loading" && <p className="text-sm text-muted">Reading saved preferences…</p>}
       {state.status === "offline" && (
-        <p className="text-sm text-muted">Preferences are only available inside the RoALT Advanced window.</p>
+        <p className="text-sm text-muted">Preferences are only available inside the Nexora window.</p>
       )}
       {state.status === "error" && (
         <div role="alert">

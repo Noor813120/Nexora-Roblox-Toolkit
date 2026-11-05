@@ -45,7 +45,7 @@ export function DatabaseCard({ onRestored }: { onRestored: () => void }) {
     <Card title="Database">
       {status.state.status === "loading" && <p className="text-sm text-muted">Reading database status…</p>}
       {status.state.status === "offline" && (
-        <p className="text-sm text-muted">Database information is only available inside the RoALT Advanced window.</p>
+        <p className="text-sm text-muted">Database information is only available inside the Nexora window.</p>
       )}
       {status.state.status === "error" && <p role="alert" className="text-sm text-danger">{status.state.message}</p>}
       {status.state.status === "ready" && (

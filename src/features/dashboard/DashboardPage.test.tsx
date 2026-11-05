@@ -104,7 +104,7 @@ describe("DashboardPage recent activity", () => {
           items: [
             makeLog(3, { message: "Database backup saved (52 KB).", severity: "info" }),
             makeLog(2, { message: "Restore went wrong", severity: "error" }),
-            makeLog(1, { message: "RoALT Advanced 0.1.0 started.", severity: "warning" }),
+            makeLog(1, { message: "Nexora 0.1.0 started.", severity: "warning" }),
           ],
           nextBeforeId: null,
         }),

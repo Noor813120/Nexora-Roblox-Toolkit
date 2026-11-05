@@ -90,7 +90,7 @@ pub fn validate_file(path: &Path, migrations: &[Migration]) -> Result<BackupInfo
         .query_row("PRAGMA application_id", [], |r| r.get(0))
         .map_err(|_| StorageError::Backup("the file is not a SQLite database".into()))?;
     if id != APPLICATION_ID {
-        return backup_err("the file is not a RoALT Advanced backup");
+        return backup_err("the file is not a Nexora backup");
     }
 
     let integrity: Vec<String> = {
@@ -124,7 +124,7 @@ pub fn validate_file(path: &Path, migrations: &[Migration]) -> Result<BackupInfo
     match migrations::plan(&conn, migrations) {
         Ok(_) => {}
         Err(StorageError::SchemaTooNew { .. }) => {
-            return backup_err("the backup was made by a newer version of RoALT Advanced");
+            return backup_err("the backup was made by a newer version of Nexora");
         }
         Err(_) => return backup_err("the backup's migration history does not match this app"),
     }
@@ -559,7 +559,7 @@ mod tests {
             .unwrap();
         let err = validate_file(&other, MIGRATIONS).unwrap_err();
         assert!(
-            matches!(err, StorageError::Backup(ref m) if m.contains("not a RoALT")),
+            matches!(err, StorageError::Backup(ref m) if m.contains("not a Nexora")),
             "{err}"
         );
     }

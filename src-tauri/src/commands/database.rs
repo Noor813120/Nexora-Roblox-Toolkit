@@ -57,7 +57,7 @@ pub fn resolve_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 fn describe_open_failure(e: &StorageError) -> String {
     match e {
         StorageError::SchemaTooNew { .. } => "This database was created by a newer version of \
-            RoALT Advanced. Update the app to use it. Nothing was changed."
+            Nexora. Update the app to use it. Nothing was changed."
             .into(),
         StorageError::MigrationFailed { .. } | StorageError::MigrationMismatch { .. } => {
             "The database could not be upgraded. Your data was left as it was, and a copy was \
@@ -151,7 +151,7 @@ pub fn init_state(path: &Path, now: i64) -> DbState {
                     c,
                     "app.started",
                     Severity::Info,
-                    &format!("RoALT Advanced {version} started."),
+                    &format!("Nexora {version} started."),
                     None,
                     now,
                 );
@@ -503,9 +503,9 @@ pub async fn backup_database(
         .dialog()
         .file()
         .set_parent(&window)
-        .set_title("Save a backup of the RoALT Advanced database")
+        .set_title("Save a backup of the Nexora database")
         .set_file_name(default_name)
-        .add_filter("RoALT Advanced database backup", &["db"]);
+        .add_filter("Nexora database backup", &["db"]);
     tauri::async_runtime::spawn_blocking(move || {
         let Some(picked) = dialog.blocking_save_file() else {
             return Ok(BackupOutcome {
@@ -536,8 +536,8 @@ pub async fn restore_database(
         .dialog()
         .file()
         .set_parent(&window)
-        .set_title("Choose a RoALT Advanced backup to restore")
-        .add_filter("RoALT Advanced database backup", &["db"]);
+        .set_title("Choose a Nexora backup to restore")
+        .add_filter("Nexora database backup", &["db"]);
     tauri::async_runtime::spawn_blocking(move || {
         let Some(picked) = dialog.blocking_pick_file() else {
             return Ok(RestoreOutcome {

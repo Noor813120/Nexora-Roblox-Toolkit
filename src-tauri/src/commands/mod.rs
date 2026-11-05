@@ -24,7 +24,7 @@ pub struct AppInfo {
 
 fn build_info() -> AppInfo {
     AppInfo {
-        name: "RoALT Advanced".into(),
+        name: "Nexora".into(),
         version: env!("CARGO_PKG_VERSION").into(),
         platform: platform::os().into(),
         arch: platform::arch().into(),
@@ -82,7 +82,7 @@ mod tests {
     fn app_info_matches_the_crate_version() {
         let info = build_info();
         assert_eq!(info.version, env!("CARGO_PKG_VERSION"));
-        assert_eq!(info.name, "RoALT Advanced");
+        assert_eq!(info.name, "Nexora");
         assert!(!info.platform.is_empty() && !info.arch.is_empty());
     }
 

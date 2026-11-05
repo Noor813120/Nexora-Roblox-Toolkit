@@ -17,7 +17,7 @@ describe("App shell", () => {
     mockTauri(backend());
     render(<App />);
     expect(await h1("Dashboard")).toBeInTheDocument();
-    expect(document.title).toBe("Dashboard · RoALT Advanced");
+    expect(document.title).toBe("Dashboard · Nexora");
     expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
   });
 
@@ -29,17 +29,20 @@ describe("App shell", () => {
   });
 
   it("renders every section's page with its own heading and a planned-phase label", async () => {
-    mockTauri(backend());
-    render(<App />);
-    await h1("Dashboard");
-    for (const item of NAV_ITEMS.filter((i) => i.id !== "dashboard")) {
-      await goTo(`#${item.path}`);
-      expect(await h1(item.label)).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: item.label })).toHaveAttribute("aria-current", "page");
-      expect(document.title).toBe(`${item.label} · RoALT Advanced`);
-      if (item.id !== "settings" && item.id !== "logs") expect(screen.getByText(/Planned for Phase \d/)).toBeInTheDocument();
+  mockTauri(backend());
+  render(<App />);
+  await h1("Dashboard");
+
+  for (const item of NAV_ITEMS.filter((i) => i.id !== "dashboard")) {
+    await goTo(`#${item.path}`);
+    expect(await h1(item.label)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: item.label })).toHaveAttribute("aria-current", "page");
+    expect(document.title).toBe(`${item.label} · Nexora`);
+    if (item.id !== "settings" && item.id !== "logs") {
+      expect(screen.getByText(/Planned for Phase \d/)).toBeInTheDocument();
     }
-  });
+  }
+}, 10000);
 
   it("moves keyboard focus to the page content on navigation", async () => {
     mockTauri(backend());

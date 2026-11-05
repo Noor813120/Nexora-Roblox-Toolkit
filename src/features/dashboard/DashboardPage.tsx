@@ -10,7 +10,7 @@ import { useBackend, type BackendState } from "../../hooks/useBackend";
 import { formatBytes, formatClock, percent } from "../../lib/format";
 import { loadRecent, RecentActivity } from "./RecentActivity";
 
-const OFFLINE_NOTE = "This page is not running inside the RoALT Advanced window, so there is no backend to ask.";
+const OFFLINE_NOTE = "This page is not running inside the Nexora window, so there is no backend to ask.";
 
 /** Application status: the one card whose data comes from the backend's `app_info`. */
 function ApplicationCard({ state }: { state: BackendState<AppInfo> }) {
@@ -100,7 +100,7 @@ export function DashboardPage() {
   return (
     <PageLayout
       title="Dashboard"
-      description="Status of RoALT Advanced and this computer."
+      description="Status of Nexora and this computer."
       actions={
         <Button
           onClick={() => {

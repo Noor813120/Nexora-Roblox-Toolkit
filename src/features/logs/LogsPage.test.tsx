@@ -14,7 +14,7 @@ describe("LogsPage states", () => {
         list_activity_logs: () => ({
           items: [
             makeLog(2, { severity: "error", eventType: "database.recovered", message: "Replaced a damaged file", metadataJson: '{"movedTo":"quarantine/x.db"}' }),
-            makeLog(1, { message: "RoALT Advanced 0.1.0 started." }),
+            makeLog(1, { message: "Nexora 0.1.0 started." }),
           ],
           nextBeforeId: null,
         }),
@@ -63,7 +63,7 @@ describe("LogsPage states", () => {
 
   it("explains itself outside the app window and disables Refresh", async () => {
     render(<LogsPage />);
-    expect(await screen.findByText(/only available inside the RoALT Advanced window/)).toBeInTheDocument();
+    expect(await screen.findByText(/only available inside the Nexora window/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Remove old entries…" })).toBeDisabled();
   });

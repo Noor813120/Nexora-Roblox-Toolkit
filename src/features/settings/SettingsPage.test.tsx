@@ -116,7 +116,7 @@ describe("Preferences (persisted settings)", () => {
 
   it("is honest outside the app window", async () => {
     render(<SettingsPage />);
-    expect(await within(card("Preferences")).findByText(/only available inside the RoALT Advanced window/)).toBeInTheDocument();
+    expect(await within(card("Preferences")).findByText(/only available inside the Nexora window/)).toBeInTheDocument();
     expect(await within(card("Database")).findByText(/only available inside/)).toBeInTheDocument();
   });
 });
@@ -252,7 +252,7 @@ describe("Database card", () => {
     mockTauri(
       backend({
         restore_database: () => {
-          if (refuse) throw { code: "invalid", message: "invalid request: the backup was made by a newer version of RoALT Advanced" };
+          if (refuse) throw { code: "invalid", message: "invalid request: the backup was made by a newer version of Nexora" };
           return { restored: true, schemaVersion: 2, migratedVersions: [2], safetyCopy: "pre-restore-x.db" };
         },
       }),

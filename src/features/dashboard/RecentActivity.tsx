@@ -25,7 +25,7 @@ export function RecentActivity({ state, reload }: { state: BackendState<Activity
     <Card title="Recent activity">
       {state.status === "loading" && <p className="text-sm text-muted">Loading activity…</p>}
       {state.status === "offline" && (
-        <p className="text-sm text-muted">Activity is only available inside the RoALT Advanced window.</p>
+        <p className="text-sm text-muted">Activity is only available inside the Nexora window.</p>
       )}
       {state.status === "error" && (
         <div role="alert">

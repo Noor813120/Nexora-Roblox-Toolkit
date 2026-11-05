@@ -154,7 +154,7 @@ pub(crate) fn check_identity(conn: &Connection) -> Result<()> {
         return Ok(());
     }
     Err(StorageError::Corrupt(
-        "the file is a database, but not a RoALT Advanced one".into(),
+        "the file is a database, but not a Nexora one".into(),
     ))
 }
 

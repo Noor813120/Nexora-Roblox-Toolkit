@@ -61,7 +61,7 @@ version 0.9.2 with an Inno Setup installer, CI and a release workflow.
   isolate and the portable logic harder to test on other systems.
 - **Heavy build.** `bundled-sqlcipher-vendored-openssl` compiles OpenSSL from source.
 
-## Decisions for RoALT Advanced
+## Decisions for Nexora
 
 Reimplement independently, with a different structure:
 

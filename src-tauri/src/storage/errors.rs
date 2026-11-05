@@ -16,7 +16,7 @@ pub enum StorageError {
     /// The change would break a uniqueness or consistency rule (duplicate name, default profile...).
     #[error("conflict: {0}")]
     Conflict(String),
-    /// The database file is damaged or is not a RoALT Advanced database.
+    /// The database file is damaged or is not a Nexora database.
     #[error("database file is corrupt: {0}")]
     Corrupt(String),
     /// The file was written by a newer version of the app. Nothing is changed.

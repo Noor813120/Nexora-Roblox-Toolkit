@@ -1,7 +1,7 @@
 [package]
-name = "roalt-advanced"
+name = "nexora"
 version = "0.1.0"
-description = "RoALT Advanced: a Windows account manager and launcher for Roblox"
+description = "Nexora: a Windows Roblox toolkit"
 edition = "2024"
 rust-version = "1.85"
 publish = false
