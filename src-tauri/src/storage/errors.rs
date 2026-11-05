@@ -87,10 +87,10 @@ impl From<StorageError> for AppError {
 /// Turns SQLite's "UNIQUE constraint failed" into a readable conflict; every other error passes
 /// through the normal classification.
 pub fn unique_to_conflict(e: rusqlite::Error, friendly: String) -> StorageError {
-    if let rusqlite::Error::SqliteFailure(_, Some(msg)) = &e {
-        if msg.starts_with("UNIQUE constraint failed") {
-            return StorageError::Conflict(friendly);
-        }
+    if let rusqlite::Error::SqliteFailure(_, Some(msg)) = &e
+        && msg.starts_with("UNIQUE constraint failed")
+    {
+        return StorageError::Conflict(friendly);
     }
     e.into()
 }

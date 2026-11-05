@@ -60,10 +60,10 @@ fn main() {
 
     app.run(|handle, event| {
         // Flush the write-ahead log so the database file on disk is complete when the app closes.
-        if let tauri::RunEvent::Exit = event {
-            if let Some(state) = handle.try_state::<commands::database::DbState>() {
-                commands::database::checkpoint_on_exit(&state);
-            }
+        if let tauri::RunEvent::Exit = event
+            && let Some(state) = handle.try_state::<commands::database::DbState>()
+        {
+            commands::database::checkpoint_on_exit(&state);
         }
     });
 }

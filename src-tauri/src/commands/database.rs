@@ -558,10 +558,10 @@ pub async fn restore_database(
 }
 
 pub fn checkpoint_on_exit(state: &DbState) {
-    if let Some(db) = state.database() {
-        if let Err(e) = db.checkpoint() {
-            eprintln!("[storage] checkpoint on exit failed: {e}");
-        }
+    if let Some(db) = state.database()
+        && let Err(e) = db.checkpoint()
+    {
+        eprintln!("[storage] checkpoint on exit failed: {e}");
     }
 }
 
