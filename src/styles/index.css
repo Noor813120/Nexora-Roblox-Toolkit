@@ -1,14 +1,27 @@
 @import "tailwindcss";
 
-/* Design tokens. Phase 2 builds the real theme system on top of these. */
+/*
+ * Design tokens. Tailwind generates utilities from these, e.g. `bg-surface`, `border-line`,
+ * `text-muted`. One accent colour, flat surfaces, 1px borders: no gradients and no shadows.
+ */
+@theme {
+  --color-canvas: #0e1014;
+  --color-surface: #151820;
+  --color-raised: #1c202a;
+  --color-line: #262b36;
+  --color-ink: #e7e9ee;
+  --color-muted: #9aa1b2;
+  --color-accent: #b4f000;
+  --color-accent-ink: #0e1014;
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-danger: #f87171;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --radius-card: 0.5rem;
+}
+
 :root {
   color-scheme: dark;
-  --bg: #0f1115;
-  --surface: #171a21;
-  --border: #262b36;
-  --text: #e6e8ee;
-  --muted: #8b93a5;
-  --accent: #b4f000;
 }
 
 html,
@@ -19,7 +32,43 @@ body,
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One visible, consistent keyboard focus ring for every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* The page container receives focus on navigation; it should not show a ring itself. */
+main:focus {
+  outline: none;
+}
+
+/* Colour-only transitions, switched off for people who ask the OS for less motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .ui-transition {
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+  .ui-fade-in {
+    animation: ui-fade-in 160ms ease-out;
+  }
+}
+
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

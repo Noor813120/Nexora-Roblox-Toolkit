@@ -18,7 +18,10 @@ mod storage;
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![commands::app_info])
+        .invoke_handler(tauri::generate_handler![
+            commands::app_info,
+            commands::system_info
+        ])
         .run(tauri::generate_context!())
         .expect("error while running RoALT Advanced");
 }

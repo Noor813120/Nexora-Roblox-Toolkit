@@ -1,7 +1,38 @@
 # Performance
 
-Status: Phase 1. Nothing has been measured yet, so this document makes no performance claims. It
-records the rules and targets that later phases are held to.
+Status: end of Phase 2. Only the frontend shell has been measured, on Linux, and the numbers
+below say exactly how. There are no Windows measurements, and nothing here is a claim about CPU or
+RAM use of the packaged app. The rules and targets are what later phases are held to.
+
+## Measured in Phase 2
+
+Setup: production build served by `vite preview`, headless Chromium 1200x760 on a 2-core Linux
+container, backend replaced by a mock that answers instantly. This is **not** WebView2 and **not**
+the packaged app; treat the numbers as a comparison point for later phases, not as results for a
+user's PC.
+
+| Measurement | Result |
+|---|---|
+| Main JS bundle | 221.64 kB raw, 70.13 kB gzip (Phase 1: 221.12 kB, 69.22 kB; React dominates) |
+| CSS | 14.49 kB raw, 3.86 kB gzip (Phase 1: 6.51 kB, 2.24 kB) |
+| Files loaded to show the Dashboard | 7 (HTML, CSS, 5 JS chunks) |
+| JS loaded to show the Dashboard | 240.74 kB raw, about 78 kB gzip |
+| Each other page | 1 extra small chunk (0.3-1.9 kB gzip), loaded on first visit; Accounts loads 2 |
+| Shared icon chunk | 12.11 kB raw, 4.76 kB gzip (the Lucide icons used by the pages) |
+| Backend calls to show the Dashboard | 2 (`app_info`, `system_info`) |
+| Backend calls during 10 s of idle | 0 more (still 2): nothing polls |
+| JS heap after load (Dashboard) | 3.4 MB |
+| DOM nodes (Dashboard) | 306 |
+| DOMContentLoaded / first contentful paint | 112 ms / 240 ms (headless, local, mocked backend) |
+| Console errors across all eight pages | 0 |
+
+Things not measured: RAM and CPU of the real Tauri process, startup time in WebView2, dev-server
+start time (the Lucide barrel import makes Vite transform about 2,000 modules in a production build,
+which took 0.4 s here), and React re-render counts. The Sidebar is memoized and routes change only
+through the URL hash, but no render profile has been taken.
+
+Also seen: running the real Tauri app (Linux, WebKitGTK, virtual display) loaded and showed live
+data from the real backend. No memory or CPU figures were taken from that run.
 
 ## Measurement rules
 

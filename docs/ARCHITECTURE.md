@@ -1,7 +1,19 @@
 # Architecture
 
-Status: Phase 1. Only the skeleton exists. Sections marked *planned* describe the intended design,
-not working code.
+Status: end of Phase 2. The shell, navigation, design system and Dashboard exist. Sections marked
+*planned* describe the intended design, not working code.
+
+## Project decisions (set by the project owner before Phase 2)
+
+1. Independent rebuild; no code shared with the reference project.
+2. Windows 10/11 x64.
+3. **Several Roblox clients are supported.**
+4. Duplicate protection detects duplicate **account + game** combinations; it does not forbid
+   several instances.
+5. **Anti-AFK is idle detection and notifications only.** The app never simulates input to defeat
+   Roblox's inactivity enforcement.
+6. Licence: MIT proposed, **not yet confirmed** by the project owner. No `LICENSE` file exists yet.
+7. Balanced RAM, CPU and reliability optimization.
 
 ## Layers
 
@@ -23,9 +35,9 @@ Windows APIs   (all cfg(windows) code, only under platform/)
 
 | Module | Purpose | Phase | State |
 |---|---|---|---|
-| `commands/` | The IPC surface. Typed request/response, validation, `AppError`. | 1+ | `app_info` only |
-| `error.rs` | `AppError` serialized as `{ code, message }`. | 1 | done, tested |
-| `platform/` | Thin OS wrappers; the only place for `cfg(windows)`. | 1, 4 | `os()`, `arch()` |
+| `commands/` | The IPC surface. Typed request/response, validation, `AppError`. | 1+ | `app_info`, `system_info` |
+| `error.rs` | `AppError` serialized as `{ code, message }`. | 1 | done, tested; no command returns it yet |
+| `platform/` | Thin OS wrappers; the only place for `cfg(windows)`. | 1, 2, 4 | `os`, `arch`, `logical_cores`, `memory_status` |
 | `storage/` | SQLite, migrations, settings, profiles, activity log. | 3 | empty |
 | `launcher/` | Process discovery, launching, sessions, queue. | 4 | empty |
 | `automation/` | Auto-join, recovery state machine, retries, cancellation. | 5 | empty |
@@ -33,35 +45,94 @@ Windows APIs   (all cfg(windows) code, only under platform/)
 | `monitoring/` | RAM/CPU sampling, adaptive intervals, Resource Guard. | 7 | empty |
 | `security/` | Credential protection, permission manifests, audit log. | 6, 8 | empty |
 
+### IPC commands
+
+| Command | Returns | Notes |
+|---|---|---|
+| `app_info` | `AppInfo { name, version, platform, arch }` | Static facts about the build. |
+| `system_info` | `SystemInfo { logicalCores: number \| null, memory: MemoryInfo \| null }` | A snapshot read once per call. `memory` (`totalBytes`, `usedBytes`, `availableBytes`) comes from `GlobalMemoryStatusEx` on Windows and is `null` everywhere else. `null` means "unavailable"; the UI must never show a made-up number. |
+
+Neither command takes input or exposes handles, paths or credentials. The TypeScript types are
+generated from the Rust structs (`npm run bindings`) into `src/api/bindings/`.
+
 ## Frontend (`src/`)
 
-`app/` (shell), `api/` (typed IPC wrappers and generated bindings), `styles/` (tokens, Tailwind).
-The planned `components/`, `features/*`, `hooks/` and `services/` folders are created when the
-first thing is put in them (Phase 2), not before.
+```
+app/            App root, navigation table, route hook, lazy page map
+components/
+  layout/       AppShell, Sidebar, PageLayout, PlannedPage
+  ui/           Card, StatCard, StatusPill, EmptyState, Button, ErrorBoundary, PageSkeleton
+features/       one folder per sidebar section (dashboard, accounts, launcher, automation,
+                scripts, performance, logs, settings), each exporting one page
+hooks/          useBackend
+lib/            format (bytes, percent, clock), errors (describeError)
+api/            typed IPC wrappers and generated bindings (the only place that calls invoke)
+styles/         Tailwind entry and design tokens
+test/           test setup and a Tauri mock for unit tests
+```
 
-## IPC rules
-
-1. Every command has typed request and response structs in Rust, exported to TypeScript with ts-rs
-   (`npm run bindings`). The generated files are committed.
-2. Every command validates its input before doing anything and returns `Result<_, AppError>`.
-3. Responses contain data, never handles or internal paths.
-4. Status updates use events, not polling from the UI.
-5. A window may call only what its capability file allows (`src-tauri/capabilities/default.json`).
-
-## Decisions
+### Navigation decisions
 
 | Decision | Reason |
 |---|---|
-| One Rust crate (binary), modules inside | Simplest to build and test. Split into crates only if build times or isolation demand it. |
-| ts-rs for shared types | Types come from the Rust structs, so the two sides cannot drift apart. The reference project uses the same approach. |
-| State machines instead of poll loops *(planned)* | Process exits and launches become events; polling is limited to metrics at adaptive intervals. |
+| Hash routing (`#/accounts`), no router library | Eight static pages need no router. Hash URLs need no server and work in the Tauri webview. One dependency avoided. |
+| One table, `NAV_ITEMS`, drives the sidebar, the Dashboard's quick links and the tests | Order, labels, paths and icons cannot drift apart. A test pins the order from the spec. |
+| Unknown or empty hash shows the Dashboard | A stale or hand-typed URL never gives a blank screen. |
+| Every page is lazy-loaded (`pages.ts`) | A session downloads only the pages it opens. |
+| Pages are wrapped in an `ErrorBoundary` keyed by route | One page crashing leaves the sidebar working, and opening another page clears the error. |
+| On navigation: window title updates and focus moves to `<main>` | Keyboard and screen-reader users land at the top of the new content. A "Skip to content" button is the first tab stop. |
+| `aria-current="page"` on the active link; icons are `aria-hidden` | Standard navigation semantics. |
+| Not built: keyboard shortcuts for sections, a collapsible sidebar, a light theme | Not needed yet. |
+
+### Component catalog
+
+| Component | File | Purpose |
+|---|---|---|
+| `AppShell` | `components/layout/AppShell.tsx` | Window frame: skip link, sidebar, page area with error boundary and Suspense; title and focus handling. |
+| `Sidebar` | `components/layout/Sidebar.tsx` | The eight sections. Memoized; re-renders only when the active route changes. |
+| `PageLayout` | `components/layout/PageLayout.tsx` | One `h1`, optional description and actions, then content. |
+| `PlannedPage` | `components/layout/PlannedPage.tsx` | A page for an unbuilt feature: description, empty state and a "Planned for Phase N" label. No fake controls. |
+| `Card` | `components/ui/Card.tsx` | The one surface: flat, 1px border, optional title as `h2` that names the section. |
+| `StatCard` | `components/ui/StatCard.tsx` | Dashboard tile: label, value, status badge, explanation. |
+| `StatusPill` | `components/ui/StatusPill.tsx` | Short status text; colour only reinforces the words. |
+| `EmptyState` | `components/ui/EmptyState.tsx` | Icon, title, description, optional phase label and real action. |
+| `Button` | `components/ui/Button.tsx` | `primary` and `ghost` variants; `type="button"` by default. |
+| `ErrorBoundary` | `components/ui/ErrorBoundary.tsx` | Fallback with "Try again"; logs to the console only. |
+| `PageSkeleton` | `components/ui/PageSkeleton.tsx` | Loading placeholder; pulses only when motion is allowed. |
+| `useBackend` | `hooks/useBackend.ts` | Loads one backend value on mount and on `reload()`; states `loading`, `offline`, `error`, `ready`; drops stale responses; never polls. |
+
+### The honesty rule for data
+
+Real backend data is shown as is. Anything the app cannot measure yet is shown as "—" with a label
+("Not available yet", "Usage not measured yet", "Unavailable") and a sentence saying why and which
+phase delivers it. There is no mock data in the app. The Roblox-client card says "This is not a
+count of zero". The Memory card says it is the whole computer, not this app or Roblox.
+
+### Design system
+
+Tokens are defined once in `styles/index.css` (`@theme`): canvas, surface, raised, line, ink,
+muted, one accent, and ok/warn/danger. Flat surfaces, 1px borders, no gradients, no shadows.
+System font stack (Segoe UI Variable on Windows), so no font is downloaded. Icons are Lucide, imported
+by name. Transitions are colour-only and a short fade on page change; both are disabled when the
+operating system asks for reduced motion. One focus ring (2px accent) is used everywhere.
+
+## Other decisions
+
+| Decision | Reason |
+|---|---|
+| One Rust crate (binary), modules inside | Simplest to build and test. Split only if build times or isolation demand it. |
+| ts-rs for shared types | Types come from the Rust structs, so the two sides cannot drift apart. |
+| State machines instead of poll loops *(planned)* | Process exits and launches become events. |
 | `cfg(windows)` only under `platform/` | Keeps the rest of the logic testable on any OS. |
-| Plain SQLite first *(planned, Phase 3)* | Avoids compiling OpenSSL for SQLCipher. Secrets are encrypted per field instead (Phase 8). Revisit if whole-database encryption is wanted. |
-| No router, state library or UI kit yet | No dependency until a phase needs it. |
+| Plain SQLite first *(planned, Phase 3)* | Avoids compiling OpenSSL for SQLCipher; secrets are encrypted per field (Phase 8). |
+| Vitest + Testing Library + jsdom for frontend tests | Reuses the Vite config; four dev-only dependencies, none in the shipped app. |
 | Edition 2024, `panic = "abort"`, LTO, `opt-level = "s"` in release | Smaller, faster binary. |
 
 ## Not done / unknown
 
-- The Windows build has not been run. Phase 1 was built and tested on Linux only (see
-  `ROADMAP.md`).
-- Whether to support several Roblox clients at once is undecided (Phase 4).
+- **No Windows verification.** Everything was built and tested on Linux. The Windows-only memory
+  code (`GlobalMemoryStatusEx`) has never been compiled or run: its signature and struct fields were
+  checked against the `windows` crate source only, and its Windows-only test has not been executed.
+- The UI has been viewed in headless Chromium (mocked backend) and in the real Tauri app under a
+  virtual display on Linux (WebKitGTK). It has not been seen in WebView2.
+- The placeholder icon has not been replaced.

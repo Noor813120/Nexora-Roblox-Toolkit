@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -15,5 +15,11 @@ export default defineConfig({
     // WebView2 on Windows 10/11 is a current Chromium, so modern output is safe and smaller.
     target: "es2022",
     sourcemap: false,
+  },
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+    css: false,
   },
 });

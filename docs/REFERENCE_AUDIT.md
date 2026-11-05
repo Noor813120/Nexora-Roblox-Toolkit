@@ -77,9 +77,10 @@ Not reimplemented, because the project spec rules them out or leaves them undeci
   spec says AFK management must not simulate input to defeat inactivity enforcement, so RoALT
   Advanced will offer idle detection, notifications and reminders only.
 - **Anything that reads or writes a Roblox client's memory or injects code.** Excluded outright.
-- **Multi-instance (holding Roblox's single-instance lock, or duplicating its handle).** The spec's
-  launcher says to prevent accidental duplicate launches. Whether to support several clients at
-  once is an open decision for Phase 4 and is not assumed here.
+- **The reference's multi-instance mechanism (holding Roblox's single-instance lock, or duplicating
+  its handle).** The project owner has since decided that several clients are supported, with
+  duplicate protection for the same account + game combination. How that is achieved is a Phase 4
+  design question, to be settled and documented then; the reference's technique is not assumed.
 
 ## Licence and attribution
 
