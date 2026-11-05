@@ -7,7 +7,7 @@ marked complete.
 |---|---|---|
 | 1. Foundation | Repo audit, Tauri 2 + React + TypeScript project, Rust module layout, docs, Git, build | Done on Linux; Windows build unverified |
 | 2. User interface | Sidebar, navigation, dashboard, reusable components, design system, frontend tests | Done on Linux; Windows build unverified |
-| 3. Database | SQLite, schema, migrations, settings, profiles, activity logs | Not started |
+| 3. Database | SQLite, schema, migrations, settings, profiles, activity logs, backup and restore | Done on Linux; Windows unverified |
 | 4. Launcher | Process discovery, Roblox launching, session tracking, launch queue | Not started |
 | 5. Automation | Auto-join, recovery state machine, retry management, cancellation, session monitoring | Not started |
 | 6. Script Hub | Import, external script execution, Luau editor, permissions, execution logs | Not started |
@@ -26,6 +26,22 @@ marked complete.
 - Rust: `system_info` command; `platform::logical_cores` and `platform::memory_status`.
 - Tests: 16 Rust, 47 frontend.
 
+## Phase 3: what exists
+
+- SQLite (rusqlite, bundled) in the OS local-data folder: WAL, foreign keys enforced, versioned
+  migrations with checksums and a safety copy before upgrades, startup integrity check, damaged files
+  moved to a quarantine folder instead of deleted.
+- Tables: settings, profiles, automation profiles (configuration only), activity logs (bounded to
+  10,000 rows plus a retention setting), migration history.
+- 20 typed IPC commands; none accepts SQL or a file path.
+- Backup (consistent single file, validated, no silent overwrite) and restore (validated, safety
+  copy, atomic load, automatic rollback), both through native dialogs opened from Rust.
+- UI: real activity on the Dashboard, a real Activity Logs page (filter, paging, clean-up), real
+  persisted preferences and a Database card in Settings, a banner for database problems.
+- Tests: 125 Rust (86 in storage), 115 frontend. Not built on purpose: any profile UI, launcher,
+  automation, credential storage.
+- Full details: [DATABASE.md](DATABASE.md).
+
 ## Project decisions (from the project owner)
 
 - Several Roblox clients are supported. Duplicate protection flags duplicate **account + game**
@@ -43,5 +59,7 @@ marked complete.
   record the results. Until then no Windows claim is made.
 - Confirm the licence, then add a `LICENSE` file.
 - Replace the placeholder icon.
-- Phase 3 will need to decide where the app's data folder lives and whether the database file is
-  encrypted as a whole or only its secrets.
+- Decided in Phase 3 (and to be confirmed by the owner if they disagree): the data folder is
+  `%LOCALAPPDATA%\RoALT-Advanced`, and the database file is **not** encrypted as a whole; secrets will
+  be protected per field in Phase 8.
+- Phase 3 Windows checks: location, backup and restore dialogs, and WAL behaviour next to antivirus.

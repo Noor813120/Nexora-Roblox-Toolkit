@@ -1,10 +1,62 @@
 # Performance
 
-Status: end of Phase 2. Only the frontend shell has been measured, on Linux, and the numbers
-below say exactly how. There are no Windows measurements, and nothing here is a claim about CPU or
-RAM use of the packaged app. The rules and targets are what later phases are held to.
+Status: end of Phase 3. Phase 2 measured the frontend shell; Phase 3 adds measurements of the
+database layer. Everything was measured on Linux and the numbers say exactly how. There are no
+Windows measurements, and nothing here is a claim about CPU or RAM use of the packaged app. The rules
+and targets are what later phases are held to.
 
-## Measured in Phase 2
+## Measured in Phase 3 (database layer)
+
+Setup: **release build**, 2 vCPU Intel Xeon @ 2.1 GHz virtual machine, `ext4` on a virtual disk,
+SQLite with `journal_mode = WAL` and `synchronous = FULL` (every commit waits for the disk). Timing
+code: `src-tauri/src/storage/perf_tests.rs`, run with
+`cargo test --release storage::perf_tests -- --ignored --nocapture --test-threads=1`. Averages over
+the repetitions shown. **These are database-layer timings only**: they exclude IPC serialisation,
+the webview and rendering. Disk-sync cost on a Windows PC (NTFS, a different SSD, antivirus) will
+differ, and the commit numbers are the ones most likely to.
+
+| Measurement | Result |
+|---|---|
+| Open and migrate a new database file | 4.5 ms (once, at startup) |
+| Reopen a database holding 10,000 log rows, including `quick_check` | 15.3 ms |
+| `create_activity_log`, one commit each (500) | 218 µs |
+| `create_activity_log` with the table at its 10,000-row cap, including trimming (200) | 293 µs |
+| Rows after those extra inserts | 10,000 (the cap holds) |
+| `list_activity_logs`, newest 50 of 10,000 (500) | 43 µs |
+| Same, filtered to errors (500) | 57 µs |
+| Same, deep page from the oldest end (500) | 14 µs |
+| Main database file at the cap (10,000 rows with messages of about 80 characters) | 1,652 KB |
+| Backup of that database (`VACUUM INTO` plus validation), 1,592 KB output | 26.6 ms |
+| Restore of that backup (copy, validate, safety copy, load, re-check) | 46.9 ms |
+
+What this says: at the history cap, every storage call is well under a millisecond and a
+backup/restore of the largest database the app allows takes under a tenth of a second, so none of
+them needs to be treated as a long-running task. What it does not say: how the UI feels (not
+measured), memory use of the process (not measured), or results on Windows (not measured).
+
+Query plans are checked by a test: severity and event-type filters use their indexes, deletion by
+age uses the timestamp index, and newest-first listing needs no sort.
+
+### Frontend changes in Phase 3
+
+Production build output (Vite), compared with the Phase 2 figures below:
+
+| Measurement | Phase 2 | Phase 3 |
+|---|---|---|
+| Main JS | 221.64 kB raw, 70.13 kB gzip | 225.55 kB raw, 71.32 kB gzip |
+| CSS | 14.49 kB raw, 3.86 kB gzip | 19.54 kB raw, 4.62 kB gzip |
+| Dashboard page chunk | not recorded | 6.17 kB raw, 2.36 kB gzip |
+| Settings page chunk (loaded on first visit) | 0.3-1.9 kB gzip class | 9.20 kB raw, 2.96 kB gzip |
+| Activity Logs page chunk (loaded on first visit) | same | 7.41 kB raw, 2.63 kB gzip |
+
+Backend calls to show the Dashboard: **4** (`app_info`, `system_info`, `list_settings`,
+`list_activity_logs`; Phase 2 had 2). The last two run one after the other because the number of
+entries to ask for is a saved setting. A unit test asserts both the four calls and that **no further
+call happens during ten simulated idle minutes** (nothing polls); this is a test with a fake timer,
+not a measurement in a browser. The Logs page asks for 50 entries per page and loads older pages only
+on request. Not re-measured in Phase 3: JS heap, DOM node count, paint timings.
+
+## Measured in Phase 2 (frontend shell, unchanged)
 
 Setup: production build served by `vite preview`, headless Chromium 1200x760 on a 2-core Linux
 container, backend replaced by a mock that answers instantly. This is **not** WebView2 and **not**
@@ -48,7 +100,9 @@ data from the real backend. No memory or CPU figures were taken from that run.
 - Poll only for numbers that have no event (CPU, memory), at adaptive intervals.
 - No background thread unless it has a job; no WebView beyond the main window.
 - Reuse one HTTP client. Bound every cache and every in-memory log.
-- SQLite in WAL mode, prepared statements, indexed queries, bounded history, batched writes.
+- SQLite in WAL mode, prepared statements, indexed queries, bounded history, batched writes
+  (all in place since Phase 3; see the measurements above). Database calls run on blocking threads,
+  never on the async runtime or the UI thread. A write that would not change anything is skipped.
 - Lazy-load heavy frontend modules (the script editor in particular). Avoid re-rendering lists on
   every metrics tick.
 

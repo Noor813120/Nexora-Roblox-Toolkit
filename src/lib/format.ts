@@ -26,3 +26,9 @@ export function percent(part: number, whole: number): number {
 export function formatClock(timestampMs: number): string {
   return new Date(timestampMs).toLocaleTimeString(undefined, { hour12: false });
 }
+
+/** A local date and time such as `Nov 4, 2026, 14:05:09`, for log entries. */
+export function formatDateTime(timestampMs: number): string {
+  if (!Number.isFinite(timestampMs)) return "—";
+  return new Date(timestampMs).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium", hour12: false });
+}

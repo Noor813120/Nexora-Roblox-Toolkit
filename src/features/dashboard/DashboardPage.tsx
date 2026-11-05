@@ -1,14 +1,14 @@
-import { Activity, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { api, type AppInfo, type SystemInfo } from "../../api";
 import { hrefFor, NAV_ITEMS } from "../../app/navigation";
 import { PageLayout } from "../../components/layout/PageLayout";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
-import { EmptyState } from "../../components/ui/EmptyState";
 import { StatCard } from "../../components/ui/StatCard";
 import { StatusPill } from "../../components/ui/StatusPill";
 import { useBackend, type BackendState } from "../../hooks/useBackend";
 import { formatBytes, formatClock, percent } from "../../lib/format";
+import { loadRecent, RecentActivity } from "./RecentActivity";
 
 const OFFLINE_NOTE = "This page is not running inside the RoALT Advanced window, so there is no backend to ask.";
 
@@ -94,6 +94,7 @@ function MemoryCard({ state }: { state: BackendState<SystemInfo> }) {
 export function DashboardPage() {
   const app = useBackend(api.appInfo);
   const system = useBackend(api.systemInfo);
+  const recent = useBackend(loadRecent);
   const links = NAV_ITEMS.filter((item) => item.id !== "dashboard");
 
   return (
@@ -101,7 +102,13 @@ export function DashboardPage() {
       title="Dashboard"
       description="Status of RoALT Advanced and this computer."
       actions={
-        <Button onClick={system.reload} disabled={system.state.status === "offline"}>
+        <Button
+          onClick={() => {
+            system.reload();
+            recent.reload();
+          }}
+          disabled={system.state.status === "offline"}
+        >
           <RefreshCw aria-hidden="true" className="h-4 w-4" />
           Refresh
         </Button>
@@ -126,15 +133,7 @@ export function DashboardPage() {
           </div>
           <p className="mt-2 text-sm text-muted">The automation engine arrives in Phase 5. Nothing is running or scheduled.</p>
         </Card>
-        <Card title="Recent activity">
-          <EmptyState
-            compact
-            icon={Activity}
-            title="No activity yet"
-            description="Launches, retries and errors will be listed here once activity logging exists."
-            phase="Planned for Phase 3"
-          />
-        </Card>
+        <RecentActivity state={recent.state} reload={recent.reload} />
       </div>
 
       <div className="mt-4">

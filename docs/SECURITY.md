@@ -1,7 +1,7 @@
 # Security
 
-Status: Phase 1. This document is the policy the code must meet. Almost none of it is implemented
-yet; each item says which phase builds it.
+Status: Phase 3. This document is the policy the code must meet. Most of it is not implemented yet;
+each item says which phase builds it. Phase 3 added the database controls below.
 
 ## Principles
 
@@ -14,16 +14,37 @@ yet; each item says which phase builds it.
 5. Never ask for or keep elevated privileges unless a single, user-confirmed action needs them.
 6. The frontend is untrusted input. Every IPC command validates its arguments. (every phase)
 
-## Current state (Phase 1)
+## Current state (Phase 3)
 
 | Control | State |
 |---|---|
 | Content Security Policy | Set in `tauri.conf.json`: same-origin scripts, `connect-src` limited to Tauri IPC, `frame-ancestors 'none'` |
 | Capabilities | `main` window has `core:default` only |
 | Shell, filesystem and HTTP plugins | Not installed |
-| Stored secrets | None exist yet |
+| Stored secrets | None exist yet. The database holds ordinary configuration only; no credential storage was introduced in Phase 3. |
 | Secrets in Git | `.gitignore` excludes `.env*`, key and certificate files, databases and `.roalt` files |
-| IPC commands | One (`app_info`), read-only, no input |
+| IPC commands | `app_info`, `system_info` (read-only), and 20 database commands. Each is typed and validated; none accepts SQL; none accepts a file path |
+| Database file | Plain SQLite in the user's local-data folder. **Not encrypted as a whole** (see below) |
+| Database input | Every value is validated in Rust, and again by CHECK constraints in the schema. All SQL uses bound parameters |
+| Backup and restore | Native dialogs opened by Rust; backups validated before use; restore validated, with a safety copy and automatic rollback; nothing uploaded; backups are not encrypted |
+| Corrupt or foreign database | Moved to a quarantine folder, never deleted, and never silently ignored |
+
+## Database security decisions (Phase 3)
+
+- **No secrets in the database.** Passwords, cookies and tokens are not stored. When credentials
+  arrive (Phase 8) they will be protected per field through a dedicated abstraction over Windows
+  DPAPI or Credential Manager, so the database would hold only protected blobs. Nothing of that
+  exists yet.
+- **No whole-file encryption.** It would add SQLCipher (and a build of OpenSSL) and a key-management
+  problem without protecting anything that needs protecting today.
+- **Anyone who can read the user's profile folder can read `roalt.db` and any backup.** Do not put
+  secrets in settings, profile configuration or activity metadata; these fields are plain text.
+- **The frontend is untrusted.** It cannot send SQL, choose which file to back up to or restore from,
+  or read tables directly. Names, JSON sizes, setting keys and ranges, event types and page sizes are
+  checked in Rust. JSON configuration must be an object of limited size.
+- **Integrity checks are not tamper protection.** The migration checksum, the application id and the
+  integrity checks detect mistakes and damage, not an attacker who edits the file.
+- Details: [DATABASE.md](DATABASE.md#security).
 
 ## Planned controls
 

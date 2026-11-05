@@ -7,7 +7,6 @@
 use serde::Serialize;
 
 #[derive(Debug, thiserror::Error)]
-#[allow(dead_code)] // Used by the commands that arrive in later phases.
 pub enum AppError {
     /// The request failed validation before anything ran.
     #[error("invalid request: {0}")]
@@ -15,18 +14,25 @@ pub enum AppError {
     /// The thing asked for does not exist.
     #[error("not found")]
     NotFound,
+    /// The request is well formed but clashes with existing data (duplicate name, default profile).
+    #[error("{0}")]
+    Conflict(String),
+    /// The database could not be opened at startup, so nothing that needs it can run.
+    #[error("the database is not available")]
+    Unavailable,
     /// Something went wrong inside the app; the cause is in the log.
     #[error("internal error")]
     Internal,
 }
 
-#[allow(dead_code)] // No command returns AppError until Phase 3; the tests cover it meanwhile.
 impl AppError {
     /// Stable machine-readable code for the frontend.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Invalid(_) => "invalid",
             Self::NotFound => "not_found",
+            Self::Conflict(_) => "conflict",
+            Self::Unavailable => "unavailable",
             Self::Internal => "internal",
         }
     }
@@ -65,6 +71,8 @@ mod tests {
         let codes = [
             AppError::Invalid(String::new()).code(),
             AppError::NotFound.code(),
+            AppError::Conflict(String::new()).code(),
+            AppError::Unavailable.code(),
             AppError::Internal.code(),
         ];
         let mut sorted = codes.to_vec();

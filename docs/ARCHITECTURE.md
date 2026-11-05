@@ -1,7 +1,7 @@
 # Architecture
 
-Status: end of Phase 2. The shell, navigation, design system and Dashboard exist. Sections marked
-*planned* describe the intended design, not working code.
+Status: end of Phase 3. The shell, navigation, design system, Dashboard and the SQLite database
+foundation exist. Sections marked *planned* describe the intended design, not working code.
 
 ## Project decisions (set by the project owner before Phase 2)
 
@@ -35,10 +35,10 @@ Windows APIs   (all cfg(windows) code, only under platform/)
 
 | Module | Purpose | Phase | State |
 |---|---|---|---|
-| `commands/` | The IPC surface. Typed request/response, validation, `AppError`. | 1+ | `app_info`, `system_info` |
-| `error.rs` | `AppError` serialized as `{ code, message }`. | 1 | done, tested; no command returns it yet |
+| `commands/` | The IPC surface. Typed request/response, validation, `AppError`. | 1+ | `app_info`, `system_info`, and 20 database commands (`commands/database.rs`) |
+| `error.rs` | `AppError` serialized as `{ code, message }`; codes `invalid`, `not_found`, `conflict`, `unavailable`, `internal`. | 1, 3 | done, tested, returned by every database command |
 | `platform/` | Thin OS wrappers; the only place for `cfg(windows)`. | 1, 2, 4 | `os`, `arch`, `logical_cores`, `memory_status` |
-| `storage/` | SQLite, migrations, settings, profiles, activity log. | 3 | empty |
+| `storage/` | SQLite: connection, migrations, settings, profiles, automation profiles, activity log, backup and restore. | 3 | done on Linux; see [DATABASE.md](DATABASE.md) |
 | `launcher/` | Process discovery, launching, sessions, queue. | 4 | empty |
 | `automation/` | Auto-join, recovery state machine, retries, cancellation. | 5 | empty |
 | `scripts/` | Script Hub: import, external execution, Luau editing. | 6 | empty |
@@ -52,21 +52,25 @@ Windows APIs   (all cfg(windows) code, only under platform/)
 | `app_info` | `AppInfo { name, version, platform, arch }` | Static facts about the build. |
 | `system_info` | `SystemInfo { logicalCores: number \| null, memory: MemoryInfo \| null }` | A snapshot read once per call. `memory` (`totalBytes`, `usedBytes`, `availableBytes`) comes from `GlobalMemoryStatusEx` on Windows and is `null` everywhere else. `null` means "unavailable"; the UI must never show a made-up number. |
 
-Neither command takes input or exposes handles, paths or credentials. The TypeScript types are
+Neither of those two takes input or exposes handles, paths or credentials. The TypeScript types are
 generated from the Rust structs (`npm run bindings`) into `src/api/bindings/`.
+
+The database commands (settings, profiles, automation profiles, activity logs, status, backup,
+restore) are listed in [DATABASE.md](DATABASE.md#ipc-commands). None accepts SQL or a file path.
 
 ## Frontend (`src/`)
 
 ```
 app/            App root, navigation table, route hook, lazy page map
 components/
-  layout/       AppShell, Sidebar, PageLayout, PlannedPage
+  layout/       AppShell, Sidebar, PageLayout, PlannedPage, DatabaseBanner
   ui/           Card, StatCard, StatusPill, EmptyState, Button, ErrorBoundary, PageSkeleton
 features/       one folder per sidebar section (dashboard, accounts, launcher, automation,
                 scripts, performance, logs, settings), each exporting one page
-hooks/          useBackend
-lib/            format (bytes, percent, clock), errors (describeError)
-api/            typed IPC wrappers and generated bindings (the only place that calls invoke)
+hooks/          useBackend (reads), useAction (writes), useActivityLog (paged log)
+lib/            format (bytes, percent, clock, date-time), errors (describeError)
+api/            typed IPC wrappers (index.ts, database.ts) and generated bindings (the only place
+                that calls invoke)
 styles/         Tailwind entry and design tokens
 test/           test setup and a Tauri mock for unit tests
 ```
@@ -100,6 +104,10 @@ test/           test setup and a Tauri mock for unit tests
 | `ErrorBoundary` | `components/ui/ErrorBoundary.tsx` | Fallback with "Try again"; logs to the console only. |
 | `PageSkeleton` | `components/ui/PageSkeleton.tsx` | Loading placeholder; pulses only when motion is allowed. |
 | `useBackend` | `hooks/useBackend.ts` | Loads one backend value on mount and on `reload()`; states `loading`, `offline`, `error`, `ready`; drops stale responses; never polls. |
+| `useAction` | `hooks/useAction.ts` | Wraps a write (save, backup...): pending / done / error state, ignores a second call while one runs, no state update after unmount. |
+| `useActivityLog` | `hooks/useActivityLog.ts` | Newest-first activity entries a page at a time; filter change restarts, `loadMore` appends without duplicates, stale replies dropped. |
+| `DatabaseBanner` | `components/layout/DatabaseBanner.tsx` | Shown above every page only when the database is unavailable or a damaged one was replaced at startup. |
+| `SeverityPill` | `features/logs/SeverityPill.tsx` | Severity as a word, with colour as reinforcement. |
 
 ### The honesty rule for data
 
@@ -124,9 +132,29 @@ operating system asks for reduced motion. One focus ring (2px accent) is used ev
 | ts-rs for shared types | Types come from the Rust structs, so the two sides cannot drift apart. |
 | State machines instead of poll loops *(planned)* | Process exits and launches become events. |
 | `cfg(windows)` only under `platform/` | Keeps the rest of the logic testable on any OS. |
-| Plain SQLite first *(planned, Phase 3)* | Avoids compiling OpenSSL for SQLCipher; secrets are encrypted per field (Phase 8). |
+| Plain SQLite via rusqlite, whole file not encrypted *(done, Phase 3)* | Avoids compiling OpenSSL for SQLCipher; the file holds ordinary configuration, and secrets will be protected per field (Phase 8). Details and the rusqlite-versus-SQLx comparison in [DATABASE.md](DATABASE.md). |
+| Database work on blocking threads, one connection | Disk access never runs on the async runtime or the UI thread; one connection behind a mutex is the simplest safe model for one user and tiny queries. |
+| The frontend never supplies a file path | Backup and restore open the native file dialog from Rust, so React cannot point the backend at arbitrary files. |
 | Vitest + Testing Library + jsdom for frontend tests | Reuses the Vite config; four dev-only dependencies, none in the shipped app. |
 | Edition 2024, `panic = "abort"`, LTO, `opt-level = "s"` in release | Smaller, faster binary. |
+
+## The database layer (Phase 3)
+
+```
+React (typed api/database.ts)
+   |  invoke("list_profiles", ...)            no SQL, no paths
+commands/database.rs   validate -> spawn_blocking -> convert errors; owns DbState (Option<Database>)
+   |
+storage/               settings . profiles . automation_profiles . activity_logs . backup
+   |                   validation . errors . migrations . clock
+database.rs            open, configure, identity + integrity check, recovery (quarantine)
+   |
+SQLite file (WAL)      %LOCALAPPDATA%\RoALT-Advanced\roalt.db  (Windows, intended)
+```
+
+If the database cannot be opened at startup the window still opens: `DbState` holds no database,
+every database command answers `unavailable`, and a banner and the Settings page explain why. See
+[DATABASE.md](DATABASE.md) for the schema, migrations, recovery, backup and security decisions.
 
 ## Not done / unknown
 
@@ -136,3 +164,6 @@ operating system asks for reduced motion. One focus ring (2px accent) is used ev
 - The UI has been viewed in headless Chromium (mocked backend) and in the real Tauri app under a
   virtual display on Linux (WebKitGTK). It has not been seen in WebView2.
 - The placeholder icon has not been replaced.
+- The database layer has never run on Windows. The data-folder location (`%LOCALAPPDATA%`), file
+  renaming over an existing file, and the Windows save dialog's overwrite prompt are unverified. The
+  real app, with real backup and restore through native dialogs, was exercised on Linux only.

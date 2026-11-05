@@ -1,16 +1,21 @@
-import { SlidersHorizontal } from "lucide-react";
+import { useState } from "react";
 import { api } from "../../api";
 import { PageLayout } from "../../components/layout/PageLayout";
 import { Card } from "../../components/ui/Card";
-import { EmptyState } from "../../components/ui/EmptyState";
 import { useBackend } from "../../hooks/useBackend";
+import { DatabaseCard } from "./DatabaseCard";
+import { PreferencesCard } from "./PreferencesCard";
 
 export function SettingsPage() {
   const { state } = useBackend(api.appInfo);
+  // Bumped after a restore so the preferences are read again from the restored database.
+  const [dataVersion, setDataVersion] = useState(0);
 
   return (
-    <PageLayout title="Settings" description="Preferences and information about this app.">
+    <PageLayout title="Settings" description="Preferences, stored data and information about this app.">
       <div className="grid gap-4 lg:grid-cols-2">
+        <PreferencesCard key={dataVersion} />
+        <DatabaseCard onRestored={() => setDataVersion((v) => v + 1)} />
         <Card title="About">
           {state.status === "loading" && <p className="text-sm text-muted">Reading build information…</p>}
           {state.status === "offline" && (
@@ -29,15 +34,6 @@ export function SettingsPage() {
               <dd>{state.data.arch}</dd>
             </dl>
           )}
-        </Card>
-        <Card title="Preferences">
-          <EmptyState
-            compact
-            icon={SlidersHorizontal}
-            title="No preferences yet"
-            description="Settings will be saved once the database exists."
-            phase="Planned for Phase 3"
-          />
         </Card>
       </div>
     </PageLayout>

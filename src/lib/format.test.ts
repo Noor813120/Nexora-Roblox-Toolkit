@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatClock, percent } from "./format";
+import { formatDateTime, formatBytes, formatClock, percent } from "./format";
 
 describe("formatBytes", () => {
   it("uses 1024-based steps like Task Manager", () => {
@@ -40,5 +40,18 @@ describe("percent", () => {
 describe("formatClock", () => {
   it("formats a 24-hour clock time", () => {
     expect(formatClock(Date.now())).toMatch(/^\d{1,2}:\d{2}:\d{2}$/);
+  });
+});
+
+describe("formatDateTime", () => {
+  it("includes the date and the time of day", () => {
+    const text = formatDateTime(new Date(2026, 10, 4, 14, 5, 9).getTime());
+    expect(text).toMatch(/2026/);
+    expect(text).toMatch(/14:05:09/);
+  });
+
+  it("gives an em dash for a value that is not a time", () => {
+    expect(formatDateTime(Number.NaN)).toBe("—");
+    expect(formatDateTime(Number.POSITIVE_INFINITY)).toBe("—");
   });
 });

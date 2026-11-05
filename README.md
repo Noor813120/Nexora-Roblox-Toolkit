@@ -3,9 +3,10 @@
 A Windows desktop app for managing Roblox accounts and launching games, built with Tauri 2, Rust,
 React 19 and TypeScript.
 
-**Status: Phase 2 (UI foundation).** The app has a sidebar with eight sections, a Dashboard with
-real build and system information, and empty states for everything not built yet. There are no
-accounts, launcher, automation or scripts yet. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Status: Phase 3 (database foundation).** The app has a sidebar with eight sections, a Dashboard
+with real build, system and activity information, persisted preferences, an Activity Logs page, and a
+local SQLite database with backup and restore. There are no accounts, launcher, automation or
+scripts yet. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 This is an independent project. It was designed after auditing
 [inspectsoftware/RoALT](https://github.com/inspectsoftware/RoALT) (MIT) and shares no code with it;
@@ -47,8 +48,15 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check
 ```
 src/            React frontend (app, components, features, hooks, lib, api, styles, test)
 src-tauri/      Rust backend (commands, automation, launcher, scripts, monitoring, storage, security, platform)
-docs/           ARCHITECTURE, ROADMAP, SECURITY, PERFORMANCE, REFERENCE_AUDIT
+docs/           ARCHITECTURE, DATABASE, ROADMAP, SECURITY, PERFORMANCE, REFERENCE_AUDIT
 ```
+
+## Where the data is stored
+
+In one SQLite file, `roalt.db`, in the operating system's local-data folder under `RoALT-Advanced`
+(intended on Windows: `%LOCALAPPDATA%\RoALT-Advanced\`; **not yet verified on Windows**). It holds
+ordinary configuration only, never passwords. Settings has the exact location, a backup button and a
+restore button. See [docs/DATABASE.md](docs/DATABASE.md).
 
 ## Licence
 

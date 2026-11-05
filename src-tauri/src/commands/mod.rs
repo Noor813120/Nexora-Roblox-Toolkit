@@ -4,6 +4,8 @@
 //! with ts-rs), validation before any work, `Result<_, AppError>`, and no process handles or other
 //! internals in the response.
 
+pub mod database;
+
 use serde::Serialize;
 use ts_rs::TS;
 

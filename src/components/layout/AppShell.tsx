@@ -3,6 +3,7 @@ import { PAGES } from "../../app/pages";
 import { useRoute } from "../../app/useRoute";
 import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { PageSkeleton } from "../ui/PageSkeleton";
+import { DatabaseBanner } from "./DatabaseBanner";
 import { Sidebar } from "./Sidebar";
 
 /**
@@ -40,6 +41,7 @@ export function AppShell() {
       <Sidebar current={route.id} />
       <main ref={mainRef} tabIndex={-1} className="min-w-0 flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-6xl">
+          <DatabaseBanner />
           {/* Keyed by route so an error on one page is cleared by opening another. */}
           <ErrorBoundary key={route.id}>
             <Suspense fallback={<PageSkeleton />}>
