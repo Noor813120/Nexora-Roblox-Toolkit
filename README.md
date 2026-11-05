@@ -1,64 +1,98 @@
-# RoALT Advanced
+# Nexora — Roblox Toolkit
 
-A Windows desktop app for managing Roblox accounts and launching games, built with Tauri 2, Rust,
-React 19 and TypeScript.
+**Launch. Manage. Automate. Monitor.**
 
-**Status: Phase 3 (database foundation).** The app has a sidebar with eight sections, a Dashboard
-with real build, system and activity information, persisted preferences, an Activity Logs page, and a
-local SQLite database with backup and restore. There are no accounts, launcher, automation or
-scripts yet. See [docs/ROADMAP.md](docs/ROADMAP.md).
+Nexora is an independent Windows desktop companion for Roblox players and developers. Its goal is to bring Roblox client management, development utilities, monitoring, and supported automation workflows into one convenient application.
 
-This is an independent project. It was designed after auditing
-[inspectsoftware/RoALT](https://github.com/inspectsoftware/RoALT) (MIT) and shares no code with it;
-see [docs/REFERENCE_AUDIT.md](docs/REFERENCE_AUDIT.md).
+> **Development status:** Early development — version 0.1.0.
 
-## What it will not do
+## Project Goals
 
-It will not inject code into Roblox, read or write a client's memory, run exploit executors, or send
-input to defeat Roblox's idle kick. Anti-AFK means idle detection and notifications only. The Luau
-tools are for Roblox Studio development only. Details in [docs/SECURITY.md](docs/SECURITY.md).
+- **Launcher:** Launch and manage Roblox clients.
+- **Multi-instance management:** Support multiple Roblox client instances.
+- **Automation:** Provide supported development and workflow automation.
+- **Script management:** Organize Luau scripts for supported development environments.
+- **Performance monitoring:** Display available system and application metrics.
+- **Activity logs:** Record application events and operations.
+- **Settings and profiles:** Store preferences and organize configurations.
+Nexora is an independent project. It was developed after auditing
+[inspectsoftware/RoALT](https://github.com/inspectsoftware/RoALT) (MIT)
+and shares no code with that project.
 
-## Requirements
+See [Reference Audit](docs/REFERENCE_AUDIT.md) and [Roadmap](docs/ROADMAP.md).
 
-- Windows 10 (1809+) or 11, x64. WebView2 runtime (built into Windows 11).
+## Current Implementation
+
+The current development build includes:
+
+- Tauri 2 desktop application foundation.
+- React 19 and TypeScript frontend.
+- Rust backend.
+- SQLite local database.
+- Persistent application settings.
+- Profile and automation-profile database foundations.
+- Dashboard with available system information.
+- Activity logging, filtering, and pagination.
+- Database backup and restore.
+- Database integrity checks and migration safeguards.
+- Windows desktop interface and native file dialogs.
+
+The following are not yet implemented as complete features:
+
+- Roblox launcher and client management.
+- Multi-instance management interface.
+- Luau script management and execution.
+- Automation workflows.
+- Account management.
+
+## Technology Stack
+
+| Technology | Purpose |
+|---|---|
+| Tauri 2 | Desktop application framework |
+| Rust | Backend |
+| React 19 | User interface |
+| TypeScript | Frontend development |
+| Vite | Build tooling |
+| SQLite | Local database |
+| Tailwind CSS | Interface styling |
+
+## Platform and Requirements
+
+- Windows 10 (1809+) or Windows 11, 64-bit.
 - Node.js 22 or newer and npm.
-- Rust (stable, 1.85+) with the MSVC toolchain and Visual Studio C++ Build Tools.
-- Git.
+- Rust stable with the MSVC toolchain.
+- Microsoft Visual Studio C++ Build Tools.
+- Windows SDK.
+- WebView2 Runtime.
 
-On Linux the backend and frontend can be built and tested (install the Tauri 2 system packages
-first), but the app targets Windows and **has not been run on Windows yet**.
+Windows development checks, desktop startup, database creation, backup, and restore have been tested on Windows. Other operating systems are not currently supported or verified.
 
-## Commands
+## Safety and Scope
 
-```bash
-npm install            # frontend dependencies
-npm run typecheck      # TypeScript check
-npm run test           # frontend tests (Vitest)
-npm run build          # typecheck + production frontend build
-npm run bindings       # regenerate TypeScript types from the Rust structs
-npm run tauri dev      # run the app with hot reload
-npm run tauri build    # build the Windows app
-cargo test --manifest-path src-tauri/Cargo.toml                           # Rust tests
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-cargo fmt --manifest-path src-tauri/Cargo.toml --check
-```
+Nexora is intended as a legitimate desktop companion and development toolkit.
 
-## Layout
+It will not provide:
 
-```
-src/            React frontend (app, components, features, hooks, lib, api, styles, test)
-src-tauri/      Rust backend (commands, automation, launcher, scripts, monitoring, storage, security, platform)
-docs/           ARCHITECTURE, DATABASE, ROADMAP, SECURITY, PERFORMANCE, REFERENCE_AUDIT
-```
+- Roblox client injection.
+- Exploit execution or unauthorized code injection.
+- Anti-cheat or security bypasses.
+- Automation designed to defeat Roblox inactivity restrictions.
 
-## Where the data is stored
+Any anti-AFK functionality is limited to idle detection and notifications. Luau tooling is intended for Roblox Studio and supported development environments.
 
-In one SQLite file, `roalt.db`, in the operating system's local-data folder under `RoALT-Advanced`
-(intended on Windows: `%LOCALAPPDATA%\RoALT-Advanced\`; **not yet verified on Windows**). It holds
-ordinary configuration only, never passwords. Settings has the exact location, a backup button and a
-restore button. See [docs/DATABASE.md](docs/DATABASE.md).
+## Data and Privacy
 
-## Licence
+Nexora uses a local SQLite database for application data.
 
-MIT is proposed but not yet confirmed by the project owner, so no `LICENSE` file has been added.
-Until one is, all rights are reserved.
+**Current Windows database location:**
+
+`%LOCALAPPDATA%\RoALT-Advanced\roalt.db`
+
+The data directory will be migrated to the Nexora identity as part of the application rename. Do not manually rename or move the existing database.
+
+Database backup and restore functionality is implemented and tested. Sensitive account credentials are not currently stored by the application.
+
+## Development
+
+Install dependencies:
