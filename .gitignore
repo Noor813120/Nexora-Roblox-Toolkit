@@ -1,0 +1,33 @@
+# Dependencies and build output
+node_modules/
+dist/
+src-tauri/target/
+*.tsbuildinfo
+
+# Local installers and bundles
+installers/
+src-tauri/gen/
+
+# Secrets and local config: never commit these
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+*.sig
+
+# User data produced while developing
+*.db
+*.db-wal
+*.db-shm
+*.roalt
+
+# Logs and OS/editor files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
