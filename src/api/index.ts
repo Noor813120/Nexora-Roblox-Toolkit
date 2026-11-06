@@ -1,11 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { databaseApi } from "./database";
+import { robloxApi } from "./roblox";
 import type { AppInfo } from "./bindings/AppInfo";
 import type { MemoryInfo } from "./bindings/MemoryInfo";
 import type { SystemInfo } from "./bindings/SystemInfo";
 
 export type { AppInfo, MemoryInfo, SystemInfo };
 export type * from "./database";
+export type * from "./roblox";
 
 /**
  * One typed wrapper per backend command. The request and response types are generated from the
@@ -15,6 +17,7 @@ export const api = {
   appInfo: () => invoke<AppInfo>("app_info"),
   systemInfo: () => invoke<SystemInfo>("system_info"),
   ...databaseApi,
+  ...robloxApi,
 };
 
 /** True when running inside the Tauri window (false in a plain browser tab, e.g. `vite` alone). */

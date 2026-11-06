@@ -3,6 +3,8 @@
 //! All `cfg(windows)` code lives under this module, so the rest of the backend stays portable and
 //! testable on any machine. Process discovery and Windows-specific tests arrive in Phase 4.
 
+pub mod roblox;
+
 /// Operating system name, e.g. `"windows"`.
 pub fn os() -> &'static str {
     std::env::consts::OS

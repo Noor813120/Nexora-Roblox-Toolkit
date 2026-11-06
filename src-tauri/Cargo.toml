@@ -19,7 +19,7 @@ rusqlite = { version = "0.40.2", features = ["bundled", "backup"] }
 tauri-plugin-dialog = "2"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", features = ["Win32_System_SystemInformation"] }
+windows = { version = "0.62", features = ["Win32_System_SystemInformation", "Win32_System_Registry"] }
 
 [profile.dev]
 debug = "line-tables-only"

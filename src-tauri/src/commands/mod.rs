@@ -5,6 +5,7 @@
 //! internals in the response.
 
 pub mod database;
+pub mod roblox;
 
 use serde::Serialize;
 use ts_rs::TS;

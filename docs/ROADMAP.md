@@ -8,7 +8,7 @@ marked complete.
 | 1. Foundation | Repo audit, Tauri 2 + React + TypeScript project, Rust module layout, docs, Git, build | Done on Linux; Windows build unverified |
 | 2. User interface | Sidebar, navigation, dashboard, reusable components, design system, frontend tests | Done on Linux; Windows build unverified |
 | 3. Database | SQLite, schema, migrations, settings, profiles, activity logs, backup and restore | Done on Linux; Windows unverified |
-| 4. Launcher | Process discovery, Roblox launching, session tracking, launch queue | Not started |
+| 4. Launcher | Process discovery, Roblox launching, session tracking, launch queue | In progress: Milestone 1 (read-only installation detection) built; automated checks pass on Windows; manual app check completed |
 | 5. Automation | Auto-join, recovery state machine, retry management, cancellation, session monitoring | Not started |
 | 6. Script Hub | Import, external script execution, Luau editor, permissions, execution logs | Not started |
 | 7. Performance | RAM and CPU monitoring, adaptive polling, Resource Guard, benchmarks | Not started |

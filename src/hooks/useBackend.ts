@@ -19,8 +19,11 @@ export type BackendState<T> =
 export function useBackend<T>(load: () => Promise<T>): {
   state: BackendState<T>;
   reload: () => void;
+  /** True while a request is in flight, including a reload that keeps showing the old data. */
+  refreshing: boolean;
 } {
   const [state, setState] = useState<BackendState<T>>({ status: "loading" });
+  const [refreshing, setRefreshing] = useState(false);
   const loadRef = useRef(load);
   loadRef.current = load;
   const latest = useRef(0);
@@ -29,16 +32,22 @@ export function useBackend<T>(load: () => Promise<T>): {
     const id = ++latest.current;
     if (!inTauri()) {
       setState({ status: "offline" });
+      setRefreshing(false);
       return;
     }
+    setRefreshing(true);
     // Keep showing the old data while refreshing; only the first load shows a loading state.
     setState((prev) => (prev.status === "ready" ? prev : { status: "loading" }));
     loadRef.current().then(
       (data) => {
-        if (id === latest.current) setState({ status: "ready", data, at: Date.now() });
+        if (id !== latest.current) return;
+        setState({ status: "ready", data, at: Date.now() });
+        setRefreshing(false);
       },
       (error: unknown) => {
-        if (id === latest.current) setState({ status: "error", message: describeError(error) });
+        if (id !== latest.current) return;
+        setState({ status: "error", message: describeError(error) });
+        setRefreshing(false);
       },
     );
   }, []);
@@ -50,5 +59,5 @@ export function useBackend<T>(load: () => Promise<T>): {
     };
   }, [run]);
 
-  return { state, reload: run };
+  return { state, reload: run, refreshing };
 }

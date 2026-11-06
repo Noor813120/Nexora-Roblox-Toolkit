@@ -35,11 +35,11 @@ Windows APIs   (all cfg(windows) code, only under platform/)
 
 | Module | Purpose | Phase | State |
 |---|---|---|---|
-| `commands/` | The IPC surface. Typed request/response, validation, `AppError`. | 1+ | `app_info`, `system_info`, and 20 database commands (`commands/database.rs`) |
+| `commands/` | The IPC surface. Typed request/response, validation, `AppError`. | 1+ | `app_info`, `system_info`, 18 database commands (`commands/database.rs`) and `detect_roblox` (`commands/roblox.rs`) |
 | `error.rs` | `AppError` serialized as `{ code, message }`; codes `invalid`, `not_found`, `conflict`, `unavailable`, `internal`. | 1, 3 | done, tested, returned by every database command |
-| `platform/` | Thin OS wrappers; the only place for `cfg(windows)`. | 1, 2, 4 | `os`, `arch`, `logical_cores`, `memory_status` |
+| `platform/` | Thin OS wrappers; the only place for `cfg(windows)`. | 1, 2, 4 | `os`, `arch`, `logical_cores`, `memory_status`, and the read-only Roblox probes (`platform/roblox.rs`) |
 | `storage/` | SQLite: connection, migrations, settings, profiles, automation profiles, activity log, backup and restore. | 3 | done on Linux; see [DATABASE.md](DATABASE.md) |
-| `launcher/` | Process discovery, launching, sessions, queue. | 4 | empty |
+| `launcher/` | Process discovery, launching, sessions, queue. | 4 | Milestone 1 only: read-only Roblox installation detection (`launcher/roblox.rs`). It decides what the evidence means and is testable on any OS; `platform/roblox.rs` reads folders, file metadata and one registry value. An install means a non-empty regular file at an expected path; contents are not checked, so it is not proof of genuine Roblox. Anything unreadable or not understood gives "inconclusive", never "not detected"; a version-named link in the Versions folder is never followed and makes the folder listing incomplete. It never runs the registry command, starts a process or uses the network, and its result is not saved or logged. Microsoft Store installs are reported as not checked. |
 | `automation/` | Auto-join, recovery state machine, retries, cancellation. | 5 | empty |
 | `scripts/` | Script Hub: import, external execution, Luau editing. | 6 | empty |
 | `monitoring/` | RAM/CPU sampling, adaptive intervals, Resource Guard. | 7 | empty |

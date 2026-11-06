@@ -83,3 +83,27 @@ describe("database service", () => {
     expect(Object.keys(api).some((k) => /sql|query$|execute|rawPath/i.test(k))).toBe(false);
   });
 });
+
+describe("roblox service", () => {
+  it("detectRoblox calls detect_roblox with no arguments", async () => {
+    const detection = { status: "notDetected", installs: [], findings: [] };
+    const invoke = mockTauri({ detect_roblox: () => detection });
+    await expect(api.detectRoblox()).resolves.toEqual(detection);
+    expect(invoke.mock.calls[0]?.[0]).toBe("detect_roblox");
+    expect(invoke.mock.calls[0]?.[1]).toEqual({});
+  });
+
+  it("detection takes no input, so the page cannot choose a path or command", () => {
+    expect(api.detectRoblox.length).toBe(0);
+    expect(Object.keys(api).filter((k) => /roblox/i.test(k))).toEqual(["detectRoblox"]);
+  });
+
+  it("passes backend errors through untouched", async () => {
+    mockTauri({
+      detect_roblox: () => {
+        throw { code: "internal", message: "Something went wrong." };
+      },
+    });
+    await expect(api.detectRoblox()).rejects.toEqual({ code: "internal", message: "Something went wrong." });
+  });
+});
