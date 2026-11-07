@@ -653,7 +653,7 @@ fn summarise_hidden_problems(hidden: &[(ProbeOutcome, String)]) -> Finding {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::collections::HashMap;
 
@@ -663,16 +663,16 @@ mod tests {
     const LAUNCHER: &str = r"C:\Users\me\AppData\Local\Roblox\Versions\version-0123456789abcdef\RobloxPlayerLauncher.exe";
 
     /// A pretend computer.
-    struct Fake {
-        supported: bool,
-        versions: Option<PathBuf>,
-        dirs: HashMap<PathBuf, DirListing>,
-        files: HashMap<PathBuf, FileState>,
-        handler: RegistryValue,
+    pub(crate) struct Fake {
+        pub(crate) supported: bool,
+        pub(crate) versions: Option<PathBuf>,
+        pub(crate) dirs: HashMap<PathBuf, DirListing>,
+        pub(crate) files: HashMap<PathBuf, FileState>,
+        pub(crate) handler: RegistryValue,
     }
 
     impl Fake {
-        fn windows() -> Self {
+        pub(crate) fn windows() -> Self {
             Fake {
                 supported: true,
                 versions: Some(PathBuf::from("root").join("Versions")),
@@ -685,7 +685,7 @@ mod tests {
             self.versions.clone().unwrap()
         }
         /// A Versions folder holding the given sub-folders.
-        fn with_folders(mut self, names: &[&str]) -> Self {
+        pub(crate) fn with_folders(mut self, names: &[&str]) -> Self {
             let listing = DirListing::Entries {
                 names: names.iter().map(|s| s.to_string()).collect(),
                 complete: true,
@@ -693,19 +693,19 @@ mod tests {
             self.dirs.insert(self.versions(), listing);
             self
         }
-        fn exe(&self, folder: &str) -> PathBuf {
+        pub(crate) fn exe(&self, folder: &str) -> PathBuf {
             self.versions().join(folder).join(PLAYER_EXE)
         }
-        fn with_exe(mut self, folder: &str, state: FileState) -> Self {
+        pub(crate) fn with_exe(mut self, folder: &str, state: FileState) -> Self {
             let p = self.exe(folder);
             self.files.insert(p, state);
             self
         }
-        fn with_handler(mut self, value: RegistryValue) -> Self {
+        pub(crate) fn with_handler(mut self, value: RegistryValue) -> Self {
             self.handler = value;
             self
         }
-        fn with_file(mut self, path: &str, state: FileState) -> Self {
+        pub(crate) fn with_file(mut self, path: &str, state: FileState) -> Self {
             self.files.insert(PathBuf::from(path), state);
             self
         }
@@ -729,7 +729,7 @@ mod tests {
         }
     }
 
-    fn file(ms: Option<i64>) -> FileState {
+    pub(crate) fn file(ms: Option<i64>) -> FileState {
         FileState::File { modified_ms: ms }
     }
 

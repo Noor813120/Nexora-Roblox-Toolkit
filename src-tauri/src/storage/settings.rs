@@ -4,10 +4,11 @@
 //! accept keys listed in [`KNOWN`], with their allowed range, so the frontend cannot store
 //! arbitrary data. A setting that was never saved reads as its default; deleting one resets it.
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::Serialize;
 use ts_rs::TS;
 
+use super::activity_logs::{self, NewActivityLog};
 use super::errors::{Result, StorageError};
 use super::validation;
 
@@ -110,6 +111,56 @@ pub fn delete_raw(conn: &Connection, key: &str) -> Result<bool> {
         .prepare_cached("DELETE FROM settings WHERE key = ?1")?
         .execute([key])?
         > 0)
+}
+
+/// What [`change_raw_logged`] is asked to do once it has seen the value currently stored.
+pub(crate) struct RawChange {
+    /// The new value, or `None` to remove the setting.
+    pub new_value: Option<String>,
+    /// The activity entry that records this change.
+    pub log: NewActivityLog,
+}
+
+/// Changes one setting and records that in the activity log, as a single all-or-nothing step.
+///
+/// In one transaction it reads the stored value, hands it to `decide`, and then:
+/// - `decide` returns `None`: nothing is written or logged, and this returns `false`;
+/// - `decide` returns a [`RawChange`]: the value is saved (or removed) and the log entry added,
+///   both committed together, and this returns `true`. If either step fails, neither happens.
+///
+/// `decide` owns the meaning of "unchanged"; this function only guarantees the atomicity. The
+/// transaction takes the write lock before the read, so the value `decide` sees cannot be stale.
+///
+/// Deliberately narrow: it is not a command and is meant to have one caller. Keys in [`KNOWN`]
+/// are refused, because they must go through [`set`] to have their range checked.
+pub(crate) fn change_raw_logged(
+    conn: &mut Connection,
+    key: &str,
+    now_ms: i64,
+    decide: impl FnOnce(Option<&str>) -> Option<RawChange>,
+) -> Result<bool> {
+    validation::setting_key(key)?;
+    if KNOWN.iter().any(|k| k.key == key) {
+        return Err(StorageError::Invalid(format!(
+            "{key} is a known setting and must be changed with its range checked"
+        )));
+    }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let previous = get_raw(&tx, key)?.map(|(value, _)| value);
+    let Some(change) = decide(previous.as_deref()) else {
+        return Ok(false);
+    };
+    match &change.new_value {
+        Some(value) => {
+            set_raw(&tx, key, value, now_ms)?;
+        }
+        None => {
+            delete_raw(&tx, key)?;
+        }
+    }
+    activity_logs::insert_in(&tx, &change.log, now_ms)?;
+    tx.commit()?;
+    Ok(true)
 }
 
 // ---- registry layer (what the commands use) ----
@@ -355,5 +406,231 @@ mod tests {
         let (db, _) = crate::storage::Database::open(&path, 2).unwrap();
         let e = db.with(|c| entry(c, DASHBOARD_ACTIVITY_COUNT)).unwrap();
         assert_eq!((e.value.as_str(), e.updated_at), ("12", Some(7)));
+    }
+
+    // ---- `change_raw_logged`: the value and its log entry stand or fall together ----
+
+    use crate::storage::activity_logs::{self, ActivityLogQuery, Severity};
+
+    const KEY: &str = "test.logged_key";
+
+    fn log(kind: &str, message: &str) -> NewActivityLog {
+        NewActivityLog {
+            event_type: kind.into(),
+            severity: Severity::Info,
+            message: message.into(),
+            metadata_json: Some(r#"{"to":"x"}"#.into()),
+        }
+    }
+
+    fn change(value: Option<&str>, entry: NewActivityLog) -> Option<RawChange> {
+        Some(RawChange {
+            new_value: value.map(str::to_owned),
+            log: entry,
+        })
+    }
+
+    fn logged(c: &Connection) -> Vec<(String, String)> {
+        activity_logs::list(c, &ActivityLogQuery::default())
+            .unwrap()
+            .items
+            .into_iter()
+            .map(|l| (l.event_type, l.message))
+            .collect()
+    }
+
+    #[test]
+    fn a_logged_change_writes_the_value_and_the_entry_together() {
+        let (_t, db) = fresh();
+        db.with(|c| {
+            // Create.
+            assert!(change_raw_logged(c, KEY, 10, |prev| {
+                assert_eq!(prev, None, "nothing stored yet");
+                change(Some("one"), log("t.changed", "created"))
+            })?);
+            assert_eq!(get_raw(c, KEY)?, Some(("one".into(), 10)));
+            // Update: the closure sees what is stored; created_at stays, updated_at moves.
+            assert!(change_raw_logged(c, KEY, 20, |prev| {
+                assert_eq!(prev, Some("one"));
+                change(Some("two"), log("t.changed", "updated"))
+            })?);
+            assert_eq!(get_raw(c, KEY)?, Some(("two".into(), 20)));
+            let created_at: i64 = c.query_row(
+                "SELECT created_at FROM settings WHERE key = ?1",
+                [KEY],
+                |r| r.get(0),
+            )?;
+            assert_eq!(created_at, 10);
+            // The entries are the ones we described, newest first, with their metadata.
+            assert_eq!(
+                logged(c),
+                [
+                    ("t.changed".to_string(), "updated".to_string()),
+                    ("t.changed".to_string(), "created".to_string())
+                ]
+            );
+            let newest = activity_logs::list(c, &ActivityLogQuery::default())?.items;
+            assert_eq!(newest[0].metadata_json.as_deref(), Some(r#"{"to":"x"}"#));
+            assert_eq!(
+                (newest[0].severity, newest[0].created_at),
+                (Severity::Info, 20)
+            );
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn deciding_no_change_writes_and_logs_nothing() {
+        let (_t, db) = fresh();
+        db.with(|c| {
+            set_raw(c, KEY, "kept", 100)?;
+            assert!(!change_raw_logged(c, KEY, 999, |prev| {
+                assert_eq!(prev, Some("kept"));
+                None
+            })?);
+            assert_eq!(
+                get_raw(c, KEY)?,
+                Some(("kept".into(), 100)),
+                "updated_at too"
+            );
+            assert!(logged(c).is_empty());
+            // Same for an absent key.
+            assert!(!change_raw_logged(c, "test.absent", 999, |_| None)?);
+            assert_eq!(get_raw(c, "test.absent")?, None);
+            assert!(logged(c).is_empty());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_logged_delete_removes_the_key_and_records_it() {
+        let (_t, db) = fresh();
+        db.with(|c| {
+            set_raw(c, KEY, "gone soon", 5)?;
+            assert!(change_raw_logged(c, KEY, 6, |prev| {
+                assert_eq!(prev, Some("gone soon"));
+                change(None, log("t.reset", "reset"))
+            })?);
+            assert_eq!(get_raw(c, KEY)?, None);
+            assert_eq!(logged(c), [("t.reset".to_string(), "reset".to_string())]);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_rejected_log_entry_rolls_back_create_update_and_delete() {
+        let (_t, db) = fresh();
+        let bad = || log("Bad Type", "x"); // event types must be lowercase dotted names
+        db.with(|c| {
+            // Create from nothing.
+            assert!(change_raw_logged(c, KEY, 1, |_| change(Some("new"), bad())).is_err());
+            assert_eq!(get_raw(c, KEY)?, None);
+            // Update an existing value.
+            set_raw(c, KEY, "old", 2)?;
+            assert!(change_raw_logged(c, KEY, 3, |_| change(Some("new"), bad())).is_err());
+            assert_eq!(get_raw(c, KEY)?, Some(("old".into(), 2)));
+            // Delete an existing value.
+            assert!(change_raw_logged(c, KEY, 4, |_| change(None, bad())).is_err());
+            assert_eq!(get_raw(c, KEY)?, Some(("old".into(), 2)));
+            assert!(logged(c).is_empty());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_log_insert_aborted_by_the_database_rolls_back_the_change() {
+        let (_t, db) = fresh();
+        db.with(|c| {
+            set_raw(c, KEY, "old", 2)?;
+            c.execute_batch(
+                "CREATE TEMP TRIGGER block_insert BEFORE INSERT ON activity_logs
+                 BEGIN SELECT RAISE(ABORT, 'blocked'); END;",
+            )?;
+            assert!(
+                change_raw_logged(c, KEY, 3, |_| change(Some("new"), log("t.e", "x"))).is_err()
+            );
+            assert_eq!(get_raw(c, KEY)?, Some(("old".into(), 2)));
+            assert!(logged(c).is_empty());
+            // Control: with the trigger gone the same call succeeds, so the trigger was the cause.
+            c.execute_batch("DROP TRIGGER block_insert")?;
+            assert!(change_raw_logged(c, KEY, 3, |_| change(
+                Some("new"),
+                log("t.e", "x")
+            ))?);
+            assert_eq!(get_raw(c, KEY)?, Some(("new".into(), 3)));
+            assert_eq!(logged(c).len(), 1);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn an_invalid_new_value_changes_and_logs_nothing() {
+        let (_t, db) = fresh();
+        db.with(|c| {
+            set_raw(c, KEY, "old", 2)?;
+            for bad in ["has\0nul".to_string(), "x".repeat(100_000)] {
+                assert!(
+                    change_raw_logged(c, KEY, 3, |_| { change(Some(&bad), log("t.e", "x")) })
+                        .is_err()
+                );
+                assert_eq!(get_raw(c, KEY)?, Some(("old".into(), 2)));
+                assert!(logged(c).is_empty());
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn bad_keys_and_known_keys_are_refused_before_deciding() {
+        let (_t, db) = fresh();
+        db.with(|c| {
+            for key in ["Bad Key", "", RETENTION_DAYS, DASHBOARD_ACTIVITY_COUNT] {
+                let mut asked = false;
+                let result = change_raw_logged(c, key, 1, |_| {
+                    asked = true;
+                    change(Some("1"), log("t.e", "x"))
+                });
+                assert!(matches!(result, Err(StorageError::Invalid(_))), "{key:?}");
+                assert!(!asked, "{key:?}: decide must not run");
+            }
+            assert_eq!(get_raw(c, RETENTION_DAYS)?, None);
+            assert!(logged(c).is_empty());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn the_generic_settings_api_cannot_reach_a_key_written_this_way() {
+        let (_t, db) = fresh();
+        db.with(|c| {
+            assert!(change_raw_logged(c, KEY, 1, |_| change(
+                Some("secret"),
+                log("t.e", "x")
+            ))?);
+            // `set`, `reset` and `entry` (what the commands call) refuse an unknown key...
+            for result in [
+                set(c, KEY, "1", 2).map(|_| ()),
+                reset(c, KEY).map(|_| ()),
+                entry(c, KEY).map(|_| ()),
+            ] {
+                assert!(matches!(result, Err(StorageError::Invalid(_))));
+            }
+            // ...the listing shows only the known settings...
+            let listed: Vec<_> = entries(c)?.into_iter().map(|e| e.key).collect();
+            let known: Vec<_> = KNOWN.iter().map(|k| k.key.to_string()).collect();
+            assert_eq!(listed, known);
+            // ...the stored value is untouched by those refusals, and known settings still work.
+            assert_eq!(get_raw(c, KEY)?, Some(("secret".into(), 1)));
+            assert_eq!(set(c, RETENTION_DAYS, "45", 3)?.value, "45");
+            Ok(())
+        })
+        .unwrap();
     }
 }

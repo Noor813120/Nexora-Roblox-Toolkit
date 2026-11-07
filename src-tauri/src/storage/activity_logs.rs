@@ -5,7 +5,7 @@
 //! startup, and a list call returns at most [`MAX_PAGE`] entries. Paging uses "entries older than
 //! this id" (keyset paging), which stays fast and stable while new entries arrive.
 
-use rusqlite::{Connection, Row, params_from_iter, types::Value};
+use rusqlite::{Connection, Row, Transaction, params_from_iter, types::Value};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -123,6 +123,22 @@ fn build(raw: (i64, String, String, String, Option<String>, i64)) -> Result<Acti
 
 /// Adds an entry and, in the same transaction, drops anything beyond the cap.
 pub fn create(conn: &mut Connection, entry: &NewActivityLog, now_ms: i64) -> Result<ActivityLog> {
+    let tx = conn.transaction()?;
+    let created = insert_in(&tx, entry, now_ms)?;
+    tx.commit()?;
+    Ok(created)
+}
+
+/// The body of [`create`], run inside a transaction the caller already opened: validates the
+/// entry, inserts it, drops anything beyond the cap and reads the row back.
+///
+/// It never commits. The caller decides, so the entry and the caller's other writes stand or fall
+/// together: on any error, dropping the transaction rolls everything back.
+pub(super) fn insert_in(
+    tx: &Transaction<'_>,
+    entry: &NewActivityLog,
+    now_ms: i64,
+) -> Result<ActivityLog> {
     let event_type = validation::event_type(&entry.event_type)?;
     let message = validation::message(&entry.message)?;
     let metadata = entry
@@ -131,7 +147,6 @@ pub fn create(conn: &mut Connection, entry: &NewActivityLog, now_ms: i64) -> Res
         .map(|m| validation::json_object(m, "metadata", validation::METADATA_JSON_MAX))
         .transpose()?;
 
-    let tx = conn.transaction()?;
     tx.prepare_cached(
         "INSERT INTO activity_logs (event_type, severity, message, metadata_json, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -153,7 +168,6 @@ pub fn create(conn: &mut Connection, entry: &NewActivityLog, now_ms: i64) -> Res
             "SELECT {COLUMNS} FROM activity_logs WHERE id = ?1"
         ))?
         .query_row([id], from_row)?;
-    tx.commit()?;
     build(created)
 }
 
@@ -613,6 +627,119 @@ mod tests {
                 !newest.contains("TEMP B-TREE"),
                 "newest-first must not need a sort: {newest}"
             );
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    // ---- `insert_in`: the entry stands or falls with the caller's transaction ----
+
+    /// A caller that writes a setting and then logs, in one transaction (the shape Stage 2 uses).
+    fn write_then_log(c: &mut Connection, e: &NewActivityLog, commit: bool) -> Result<()> {
+        let tx = c.transaction()?;
+        settings::set_raw(&tx, "test.marker", "set", 1)?;
+        insert_in(&tx, e, 2)?;
+        if commit {
+            tx.commit()?;
+        }
+        Ok(())
+    }
+
+    fn marker(c: &Connection) -> Option<String> {
+        settings::get_raw(c, "test.marker").unwrap().map(|(v, _)| v)
+    }
+
+    #[test]
+    fn helper_does_not_commit_the_callers_transaction() {
+        let (_t, db) = fresh();
+        db.with(|c| {
+            // Caller drops the transaction without committing: nothing may remain.
+            write_then_log(c, &entry("t.e", Severity::Info, "x"), false)?;
+            assert_eq!(count(c)?, 0, "the helper must not have committed the entry");
+            assert_eq!(marker(c), None, "nor the caller's own write");
+            // Control: when the caller does commit, both are there.
+            write_then_log(c, &entry("t.e", Severity::Info, "x"), true)?;
+            assert_eq!(count(c)?, 1);
+            assert_eq!(marker(c).as_deref(), Some("set"));
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_rejected_entry_rolls_back_the_callers_write() {
+        let (_t, db) = fresh();
+        db.with(|c| {
+            for bad in [
+                entry("Bad Type", Severity::Info, "x"), // event type
+                entry("t.e", Severity::Info, "   "),    // empty message
+                NewActivityLog {
+                    metadata_json: Some("[1]".into()), // not a JSON object
+                    ..entry("t.e", Severity::Info, "x")
+                },
+            ] {
+                assert!(write_then_log(c, &bad, true).is_err());
+                assert_eq!(count(c)?, 0);
+                assert_eq!(marker(c), None, "the caller's write was rolled back too");
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn an_insert_aborted_by_the_database_rolls_back_the_callers_write() {
+        let (_t, db) = fresh();
+        db.with(|c| {
+            c.execute_batch(
+                "CREATE TEMP TRIGGER block_insert BEFORE INSERT ON activity_logs
+                 BEGIN SELECT RAISE(ABORT, 'blocked'); END;",
+            )?;
+            assert!(write_then_log(c, &entry("t.e", Severity::Info, "x"), true).is_err());
+            assert_eq!(count(c)?, 0);
+            assert_eq!(marker(c), None);
+            // Control: the same call succeeds once the trigger is gone, so the failure above
+            // really came from the trigger.
+            c.execute_batch("DROP TRIGGER block_insert")?;
+            write_then_log(c, &entry("t.e", Severity::Info, "x"), true)?;
+            assert_eq!((count(c)?, marker(c).as_deref()), (1, Some("set")));
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn failed_cap_pruning_rolls_back_the_entry_and_the_callers_write() {
+        let (_t, db) = fresh();
+        db.with(|c| {
+            let tx = c.transaction()?;
+            tx.execute(
+                "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?1)
+                 INSERT INTO activity_logs (event_type, severity, message, created_at)
+                 SELECT 'bulk.fill', 'info', 'row ' || i, i FROM n",
+                [MAX_ROWS],
+            )?;
+            tx.commit()?;
+            let first_id = |c: &Connection| -> Result<i64> {
+                Ok(c.query_row("SELECT MIN(id) FROM activity_logs", [], |r| r.get(0))?)
+            };
+
+            // At the cap, the next insert must delete row 1. Make that delete fail.
+            c.execute_batch(
+                "CREATE TEMP TRIGGER block_prune BEFORE DELETE ON activity_logs
+                 BEGIN SELECT RAISE(ABORT, 'blocked'); END;",
+            )?;
+            assert!(write_then_log(c, &entry("t.new", Severity::Info, "new"), true).is_err());
+            assert_eq!(count(c)?, MAX_ROWS, "the inserted entry was rolled back");
+            assert_eq!(first_id(c)?, 1, "nothing was pruned");
+            assert_eq!(marker(c), None, "the caller's write was rolled back too");
+
+            // Control: without the trigger the same call prunes exactly one row and commits.
+            c.execute_batch("DROP TRIGGER block_prune")?;
+            write_then_log(c, &entry("t.new", Severity::Info, "new"), true)?;
+            assert_eq!(count(c)?, MAX_ROWS);
+            assert_eq!(first_id(c)?, 2);
+            assert_eq!(marker(c).as_deref(), Some("set"));
             Ok(())
         })
         .unwrap();

@@ -55,6 +55,8 @@ fn main() {
             commands::database::backup_database,
             commands::database::restore_database,
             commands::roblox::detect_roblox,
+            commands::roblox::get_install_selection,
+            commands::roblox::set_preferred_install,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Nexora");

@@ -3,4 +3,5 @@
 //! Implemented so far: read-only installation detection ([`roblox`]). Launching, process discovery
 //! and sessions are not implemented yet.
 
+pub mod preference;
 pub mod roblox;

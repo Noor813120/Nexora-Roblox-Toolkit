@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import type { PreferenceResolution, PreferredSource, RobloxInstall } from "../api";
 
 type Handler = (args?: unknown) => unknown;
 
@@ -161,6 +162,74 @@ export const ROBLOX_UNSUPPORTED = {
   findings: [{ source: "platform", outcome: "unsupported", detail: "Roblox detection is only available on Windows." }],
 };
 
+// ---- Preferred installation fixtures ----
+// Typed against the generated bindings, so a change to the Rust types breaks these at compile time.
+
+export const INSTALL_HANDLER: RobloxInstall = {
+  source: "protocolHandler",
+  version: "version-0123456789abcdef",
+  executablePath: "C:\\Users\\test\\AppData\\Local\\Roblox\\Versions\\version-0123456789abcdef\\RobloxPlayerLauncher.exe",
+  modifiedAt: 1_762_000_000_000,
+};
+
+export const INSTALL_FOLDER: RobloxInstall = {
+  source: "versionFolder",
+  version: "version-fedcba9876543210",
+  executablePath: "C:\\Users\\test\\AppData\\Local\\Roblox\\Versions\\version-fedcba9876543210\\RobloxPlayerBeta.exe",
+  modifiedAt: 1_762_100_000_000,
+};
+
+const resolution = (
+  fields: Partial<PreferenceResolution> & Pick<PreferenceResolution, "state">,
+): PreferenceResolution => ({ preferred: null, chosen: null, candidateCount: 0, reason: null, ...fields });
+
+/** "Automatic": nothing saved, and detection's first install is used. */
+export const PREF_AUTOMATIC = resolution({ state: "automatic", chosen: INSTALL_HANDLER });
+/** "Automatic" with nothing found to use. */
+export const PREF_AUTOMATIC_NONE = resolution({ state: "automatic" });
+export const PREF_AVAILABLE_FOLDERS = resolution({
+  state: "available",
+  preferred: "versionFolder",
+  chosen: INSTALL_FOLDER,
+  candidateCount: 2,
+});
+export const PREF_AVAILABLE_HANDLER = resolution({
+  state: "available",
+  preferred: "protocolHandler",
+  chosen: INSTALL_HANDLER,
+  candidateCount: 1,
+});
+export const PREF_UNAVAILABLE = resolution({ state: "unavailable", preferred: "protocolHandler" });
+export const PREF_INCONCLUSIVE = resolution({ state: "inconclusive", preferred: "versionFolder" });
+export const PREF_INVALID = resolution({ state: "invalid" });
+export const PREF_NEWER = resolution({ state: "unsupported", reason: "newerFormat" });
+export const PREF_UNSUPPORTED_SOURCE = resolution({ state: "unsupported", reason: "unsupportedSource" });
+export const PREF_UNSUPPORTED_PLATFORM = resolution({
+  state: "unsupported",
+  preferred: "versionFolder",
+  reason: "unsupportedPlatform",
+});
+
+export const BOTH_SOURCES: PreferredSource[] = ["protocolHandler", "versionFolder"];
+
+/**
+ * What `get_install_selection` and `set_preferred_install` return. The detection is loosely typed,
+ * like the other detection fixtures. Left out, `preference` is "automatic" (using detection's
+ * first install when there is one); an explicit `null` means the preference could not be read.
+ */
+export function selection(
+  detection: unknown,
+  preference?: PreferenceResolution | null,
+  availableSources: PreferredSource[] = [],
+) {
+  const found = ((detection as { installs?: unknown[] }).installs ?? []).length > 0;
+  return {
+    detection,
+    preference: preference === undefined ? (found ? PREF_AUTOMATIC : PREF_AUTOMATIC_NONE) : preference,
+    availableSources,
+  };
+}
+
 /** Handlers for every read the app makes on load, so a test only overrides what it cares about. */
 export function backend(overrides: Record<string, Handler> = {}): Record<string, Handler> {
   return {
@@ -170,6 +239,7 @@ export function backend(overrides: Record<string, Handler> = {}): Record<string,
     list_settings: () => SETTINGS,
     list_activity_logs: () => ({ items: [], nextBeforeId: null }),
     detect_roblox: () => ROBLOX_NOT_DETECTED,
+    get_install_selection: () => selection(ROBLOX_NOT_DETECTED),
     ...overrides,
   };
 }

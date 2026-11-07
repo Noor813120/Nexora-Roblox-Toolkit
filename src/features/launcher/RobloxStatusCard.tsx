@@ -4,6 +4,7 @@ import {
   type DetectionSource,
   type DetectionStatus,
   type Finding,
+  type InstallSelection,
   type ProbeOutcome,
   type RobloxDetection,
   type RobloxInstall,
@@ -13,6 +14,7 @@ import { Card } from "../../components/ui/Card";
 import { StatusPill, type Tone } from "../../components/ui/StatusPill";
 import { useBackend } from "../../hooks/useBackend";
 import { formatClock, formatDateTime } from "../../lib/format";
+import { InstallPreferencePanel } from "./InstallPreferencePanel";
 
 const STATUS: Record<DetectionStatus, { label: string; tone: Tone; explanation: string }> = {
   detected: {
@@ -109,7 +111,8 @@ function Headline({ detection, checkedAt }: { detection: RobloxDetection; checke
   );
 }
 
-function Result({ detection }: { detection: RobloxDetection }) {
+function Result({ selection, onSaved }: { selection: InstallSelection; onSaved: () => void }) {
+  const { detection } = selection;
   const status = STATUS[detection.status];
   return (
     <>
@@ -123,6 +126,8 @@ function Result({ detection }: { detection: RobloxDetection }) {
         </ul>
       )}
 
+      <InstallPreferencePanel selection={selection} onSaved={onSaved} />
+
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">What was checked</h3>
       <ul className="space-y-2" aria-label="What was checked">
         {detection.findings.map((finding, i) => (
@@ -134,11 +139,12 @@ function Result({ detection }: { detection: RobloxDetection }) {
 }
 
 /**
- * Whether Roblox is installed on this computer. It only reads: it never starts Roblox, and the
- * answer is shown here without being saved anywhere.
+ * Whether Roblox is installed on this computer, and which installation Nexora prefers. Roblox
+ * detection is read-only: it does not start Roblox or persist detection results. The card saves a
+ * preferred installation source only when the user explicitly presses Save choice.
  */
 export function RobloxStatusCard() {
-  const { state, reload, refreshing } = useBackend(api.detectRoblox);
+  const { state, reload, refreshing } = useBackend(api.getInstallSelection);
   // A check is already running (first load or "Check again"): do not start another.
   const busy = refreshing || state.status === "loading";
   return (
@@ -157,7 +163,7 @@ export function RobloxStatusCard() {
         {state.status === "offline" && (
           <p className="text-sm text-muted">Roblox detection only works inside the Nexora window.</p>
         )}
-        {state.status === "ready" && <Headline detection={state.data} checkedAt={state.at} />}
+        {state.status === "ready" && <Headline detection={state.data.detection} checkedAt={state.at} />}
         {refreshing && state.status !== "loading" && (
           <p className="text-xs text-muted">Checking for Roblox again…</p>
         )}
@@ -167,7 +173,7 @@ export function RobloxStatusCard() {
           {state.message}
         </p>
       )}
-      {state.status === "ready" && <Result detection={state.data} />}
+      {state.status === "ready" && <Result selection={state.data} onSaved={reload} />}
     </Card>
   );
 }

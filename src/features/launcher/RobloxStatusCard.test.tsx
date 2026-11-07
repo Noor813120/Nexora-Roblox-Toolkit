@@ -1,13 +1,17 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
+  BOTH_SOURCES,
   mockTauri,
+  PREF_AUTOMATIC,
+  PREF_AVAILABLE_FOLDERS,
   ROBLOX_DETECTED,
   ROBLOX_INCONCLUSIVE,
   ROBLOX_INCONCLUSIVE_INCOMPLETE,
   ROBLOX_INCONCLUSIVE_MALFORMED,
   ROBLOX_NOT_DETECTED,
   ROBLOX_UNSUPPORTED,
+  selection,
 } from "../../test/mockTauri";
 import { RobloxStatusCard } from "./RobloxStatusCard";
 
@@ -15,7 +19,7 @@ const card = () => screen.getByRole("region", { name: "Roblox installation" });
 
 describe("RobloxStatusCard", () => {
   it("shows a loading state, then an install with where it came from", async () => {
-    mockTauri({ detect_roblox: () => ROBLOX_DETECTED });
+    mockTauri({ get_install_selection: () => selection(ROBLOX_DETECTED) });
     render(<RobloxStatusCard />);
     expect(within(card()).getByText("Looking for Roblox…")).toBeInTheDocument();
 
@@ -34,7 +38,7 @@ describe("RobloxStatusCard", () => {
   });
 
   it("says plainly that nothing was found, and that Microsoft Store installs are not checked", async () => {
-    mockTauri({ detect_roblox: () => ROBLOX_NOT_DETECTED });
+    mockTauri({ get_install_selection: () => selection(ROBLOX_NOT_DETECTED) });
     render(<RobloxStatusCard />);
     expect(await within(card()).findByText("Not detected")).toBeInTheDocument();
     expect(within(card()).queryByRole("list", { name: "Roblox installs found" })).not.toBeInTheDocument();
@@ -47,7 +51,7 @@ describe("RobloxStatusCard", () => {
   });
 
   it("does not present an unreadable place as 'not installed'", async () => {
-    mockTauri({ detect_roblox: () => ROBLOX_INCONCLUSIVE });
+    mockTauri({ get_install_selection: () => selection(ROBLOX_INCONCLUSIVE) });
     render(<RobloxStatusCard />);
     expect(await within(card()).findByText("Could not tell")).toBeInTheDocument();
     expect(within(card()).queryByText("Not detected")).not.toBeInTheDocument();
@@ -56,7 +60,7 @@ describe("RobloxStatusCard", () => {
   });
 
   it("does not claim every location was empty when nothing was detected", async () => {
-    mockTauri({ detect_roblox: () => ROBLOX_NOT_DETECTED });
+    mockTauri({ get_install_selection: () => selection(ROBLOX_NOT_DETECTED) });
     render(<RobloxStatusCard />);
     await within(card()).findByText("Not detected");
     expect(
@@ -69,7 +73,7 @@ describe("RobloxStatusCard", () => {
   });
 
   it("describes found files as passing basic checks, not as genuine Roblox", async () => {
-    mockTauri({ detect_roblox: () => ROBLOX_DETECTED });
+    mockTauri({ get_install_selection: () => selection(ROBLOX_DETECTED) });
     render(<RobloxStatusCard />);
     await within(card()).findByText("Roblox files found");
     expect(within(card()).getAllByText("Passed basic checks").length).toBeGreaterThan(0);
@@ -79,7 +83,7 @@ describe("RobloxStatusCard", () => {
   });
 
   it("shows a malformed handler as 'Could not tell', with hidden problems as 'Several problems'", async () => {
-    mockTauri({ detect_roblox: () => ROBLOX_INCONCLUSIVE_MALFORMED });
+    mockTauri({ get_install_selection: () => selection(ROBLOX_INCONCLUSIVE_MALFORMED) });
     render(<RobloxStatusCard />);
     expect(await within(card()).findByText("Could not tell")).toBeInTheDocument();
     expect(within(card()).queryByText("Not detected")).not.toBeInTheDocument();
@@ -89,7 +93,7 @@ describe("RobloxStatusCard", () => {
   });
 
   it("explains an unsupported system", async () => {
-    mockTauri({ detect_roblox: () => ROBLOX_UNSUPPORTED });
+    mockTauri({ get_install_selection: () => selection(ROBLOX_UNSUPPORTED) });
     render(<RobloxStatusCard />);
     expect(await within(card()).findByText("Not supported here")).toBeInTheDocument();
     expect(within(card()).getByText("Roblox detection is only available on Windows.")).toBeInTheDocument();
@@ -97,7 +101,7 @@ describe("RobloxStatusCard", () => {
 
   it("shows backend errors as an alert, with no result", async () => {
     mockTauri({
-      detect_roblox: () => {
+      get_install_selection: () => {
         throw { code: "internal", message: "Something went wrong." };
       },
     });
@@ -115,7 +119,7 @@ describe("RobloxStatusCard", () => {
 
   it("checks again on request and shows the new answer", async () => {
     let answer: unknown = ROBLOX_NOT_DETECTED;
-    const invoke = mockTauri({ detect_roblox: () => answer });
+    const invoke = mockTauri({ get_install_selection: () => selection(answer) });
     render(<RobloxStatusCard />);
     expect(await within(card()).findByText("Not detected")).toBeInTheDocument();
 
@@ -123,11 +127,11 @@ describe("RobloxStatusCard", () => {
     fireEvent.click(within(card()).getByRole("button", { name: "Check again" }));
     expect(await within(card()).findByText("Roblox files found")).toBeInTheDocument();
     await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
-    expect(invoke.mock.calls.every(([cmd]) => cmd === "detect_roblox")).toBe(true);
+    expect(invoke.mock.calls.every(([cmd]) => cmd === "get_install_selection")).toBe(true);
   });
 
   it("shows a partly listed folder as 'Could not tell' with 'Partly checked'", async () => {
-    mockTauri({ detect_roblox: () => ROBLOX_INCONCLUSIVE_INCOMPLETE });
+    mockTauri({ get_install_selection: () => selection(ROBLOX_INCONCLUSIVE_INCOMPLETE) });
     render(<RobloxStatusCard />);
     expect(await within(card()).findByText("Could not tell")).toBeInTheDocument();
     expect(within(card()).queryByText("Not detected")).not.toBeInTheDocument();
@@ -140,9 +144,9 @@ describe("RobloxStatusCard", () => {
     let finish: (value: unknown) => void = () => {};
     let calls = 0;
     const invoke = mockTauri({
-      detect_roblox: () => {
+      get_install_selection: () => {
         calls += 1;
-        return calls === 1 ? ROBLOX_NOT_DETECTED : new Promise((resolve) => (finish = resolve));
+        return calls === 1 ? selection(ROBLOX_NOT_DETECTED) : new Promise((resolve) => (finish = resolve));
       },
     });
     render(<RobloxStatusCard />);
@@ -158,14 +162,14 @@ describe("RobloxStatusCard", () => {
     fireEvent.click(busy);
     expect(invoke).toHaveBeenCalledTimes(2); // first load + one refresh, not three
 
-    finish(ROBLOX_DETECTED);
+    finish(selection(ROBLOX_DETECTED));
     expect(await within(card()).findByText("Roblox files found")).toBeInTheDocument();
     expect(within(card()).getByRole("button", { name: "Check again" })).toBeEnabled();
     expect(within(card()).queryByText("Checking for Roblox again…")).not.toBeInTheDocument();
   });
 
   it("keeps one live region mounted from the first render, so updates are announced", async () => {
-    mockTauri({ detect_roblox: () => ROBLOX_DETECTED });
+    mockTauri({ get_install_selection: () => selection(ROBLOX_DETECTED) });
     const { container } = render(<RobloxStatusCard />);
     const region = container.querySelector('[aria-live="polite"]');
     expect(region).not.toBeNull(); // present before any result exists
@@ -174,12 +178,140 @@ describe("RobloxStatusCard", () => {
     expect(region).toHaveTextContent("Roblox files found");
   });
 
-  it("only offers 'Check again': nothing here can launch or change anything", async () => {
-    mockTauri({ detect_roblox: () => ROBLOX_DETECTED });
+  it("only offers 'Check again' and 'Save choice': nothing here can launch anything", async () => {
+    mockTauri({ get_install_selection: () => selection(ROBLOX_DETECTED) });
     render(<RobloxStatusCard />);
     await within(card()).findByText("Roblox files found");
     const buttons = within(card()).getAllByRole("button");
-    expect(buttons.map((b) => b.textContent)).toEqual(["Check again"]);
+    expect(buttons.map((b) => b.textContent)).toEqual(["Check again", "Save choice"]);
     expect(within(card()).queryByRole("link")).not.toBeInTheDocument();
+  });
+});
+
+describe("RobloxStatusCard: preferred installation", () => {
+  it("shows the preference below the detection result, from the same answer", async () => {
+    const invoke = mockTauri({
+      get_install_selection: () => selection(ROBLOX_DETECTED, PREF_AVAILABLE_FOLDERS, BOTH_SOURCES),
+    });
+    render(<RobloxStatusCard />);
+    expect(await within(card()).findByText("Roblox files found")).toBeInTheDocument();
+    expect(within(card()).getByRole("group", { name: "Preferred installation" })).toBeInTheDocument();
+    expect(within(card()).getByText(/using 1 of 2 installations found/)).toBeInTheDocument();
+    expect(within(card()).getByRole("radio", { name: "Roblox version folders" })).toBeChecked();
+    // One read, nothing written.
+    expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(["get_install_selection"]);
+  });
+
+  it("places the preference after the installs and before 'What was checked'", async () => {
+    mockTauri({ get_install_selection: () => selection(ROBLOX_DETECTED, PREF_AUTOMATIC, BOTH_SOURCES) });
+    render(<RobloxStatusCard />);
+    await within(card()).findByText("Roblox files found");
+    const installs = within(card()).getByRole("list", { name: "Roblox installs found" });
+    const preference = within(card()).getByRole("group", { name: "Preferred installation" });
+    const checked = within(card()).getByRole("heading", { name: "What was checked" });
+    const comesBefore = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(comesBefore(installs, preference)).toBe(true);
+    expect(comesBefore(preference, checked)).toBe(true);
+  });
+
+  it("has two separate live regions that announce different things, and both survive a refresh", async () => {
+    const invoke = mockTauri({
+      get_install_selection: () => selection(ROBLOX_DETECTED, PREF_AUTOMATIC, BOTH_SOURCES),
+    });
+    const { container } = render(<RobloxStatusCard />);
+    await within(card()).findByText("Roblox files found");
+    const regions = () => Array.from(container.querySelectorAll('[aria-live="polite"]')) as HTMLElement[];
+
+    expect(regions()).toHaveLength(2);
+    const [cardRegion, panelRegion] = regions() as [HTMLElement, HTMLElement];
+    // Neither is inside the other, so nothing is announced as part of both.
+    expect(cardRegion.contains(panelRegion)).toBe(false);
+    expect(panelRegion.contains(cardRegion)).toBe(false);
+    // Each carries its own message, and neither repeats the other's.
+    expect(cardRegion).toHaveTextContent("Roblox files found");
+    expect(cardRegion).not.toHaveTextContent("Using the first installation found");
+    expect(panelRegion).toHaveTextContent("Using the first installation found");
+    expect(panelRegion).not.toHaveTextContent("Roblox files found");
+
+    // They are the same elements after "Check again", not replaced.
+    fireEvent.click(within(card()).getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(within(card()).getByRole("button", { name: "Check again" })).toBeEnabled());
+    expect(regions()).toHaveLength(2);
+    expect(regions()[0]).toBe(cardRegion);
+    expect(regions()[1]).toBe(panelRegion);
+  });
+
+  it("an unreadable preference store does not hide detection, and is not shown as 'Automatic'", async () => {
+    mockTauri({ get_install_selection: () => selection(ROBLOX_DETECTED, null, BOTH_SOURCES) });
+    render(<RobloxStatusCard />);
+    expect(await within(card()).findByText("Roblox files found")).toBeInTheDocument(); // detection is intact
+    expect(within(card()).getByText(/Preference storage is unavailable/)).toBeInTheDocument();
+    expect(within(card()).getByRole("group", { name: "Preferred installation" })).toBeDisabled();
+    expect(within(card()).getByRole("button", { name: "Save choice" })).toBeDisabled();
+    expect(within(card()).getByRole("button", { name: "Check again" })).toBeEnabled(); // M1 behaviour intact
+  });
+
+  it("saving reloads the whole selection and shows what the backend now says", async () => {
+    let saved = false;
+    const invoke = mockTauri({
+      get_install_selection: () =>
+        saved
+          ? selection(ROBLOX_DETECTED, PREF_AVAILABLE_FOLDERS, BOTH_SOURCES)
+          : selection(ROBLOX_DETECTED, PREF_AUTOMATIC, BOTH_SOURCES),
+      set_preferred_install: () => {
+        saved = true;
+        // What this call returns is deliberately NOT what the next read says, to show that the
+        // screen follows the reload and not the reply.
+        return selection(ROBLOX_NOT_DETECTED, null, []);
+      },
+    });
+    render(<RobloxStatusCard />);
+    await within(card()).findByText("Roblox files found");
+    expect(within(card()).getByRole("radio", { name: "Automatic" })).toBeChecked();
+
+    fireEvent.click(within(card()).getByRole("radio", { name: "Roblox version folders" }));
+    fireEvent.click(within(card()).getByRole("button", { name: "Save choice" }));
+
+    await waitFor(() => expect(within(card()).getByText(/using 1 of 2 installations found/)).toBeInTheDocument());
+    expect(invoke.mock.calls.map(([cmd, args]) => [cmd, args])).toEqual([
+      ["get_install_selection", {}],
+      ["set_preferred_install", { choice: "versionFolder" }],
+      ["get_install_selection", {}],
+    ]);
+    expect(within(card()).getByText("Roblox files found")).toBeInTheDocument(); // not the reply's detection
+    expect(within(card()).getByRole("radio", { name: "Roblox version folders" })).toBeChecked();
+  });
+
+  it("'Check again' re-reads without writing, and keeps an unsaved pick", async () => {
+    const invoke = mockTauri({
+      get_install_selection: () => selection(ROBLOX_DETECTED, PREF_AUTOMATIC, BOTH_SOURCES),
+    });
+    render(<RobloxStatusCard />);
+    await within(card()).findByText("Roblox files found");
+    fireEvent.click(within(card()).getByRole("radio", { name: "Windows link handler" }));
+    fireEvent.click(within(card()).getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    expect(invoke.mock.calls.every(([cmd]) => cmd === "get_install_selection")).toBe(true);
+    await waitFor(() => expect(within(card()).getByRole("button", { name: "Check again" })).toBeEnabled());
+    expect(within(card()).getByRole("radio", { name: "Windows link handler" })).toBeChecked();
+  });
+
+  it("shows no preference control when offline or after an error", async () => {
+    // Offline: not inside the app window.
+    const { unmount } = render(<RobloxStatusCard />);
+    expect(await within(card()).findByText(/only works inside the Nexora window/)).toBeInTheDocument();
+    expect(within(card()).queryByRole("group", { name: "Preferred installation" })).not.toBeInTheDocument();
+    unmount();
+
+    // Error: the read failed.
+    mockTauri({
+      get_install_selection: () => {
+        throw { code: "internal", message: "Something went wrong." };
+      },
+    });
+    render(<RobloxStatusCard />);
+    expect(await within(card()).findByRole("alert")).toHaveTextContent("Something went wrong.");
+    expect(within(card()).queryByRole("group", { name: "Preferred installation" })).not.toBeInTheDocument();
   });
 });

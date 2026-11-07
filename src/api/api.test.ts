@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mockTauri } from "../test/mockTauri";
+import { mockTauri, selection } from "../test/mockTauri";
 import { api } from "./index";
 
 /** Every database command, the exact name and argument shape Rust expects. */
@@ -95,7 +95,57 @@ describe("roblox service", () => {
 
   it("detection takes no input, so the page cannot choose a path or command", () => {
     expect(api.detectRoblox.length).toBe(0);
-    expect(Object.keys(api).filter((k) => /roblox/i.test(k))).toEqual(["detectRoblox"]);
+    expect(api.getInstallSelection.length).toBe(0);
+    // The whole Roblox surface: nothing here takes a path, a command or a program to run.
+    expect(Object.keys(api).filter((k) => /roblox|install|launch/i.test(k))).toEqual([
+      "detectRoblox",
+      "getInstallSelection",
+      "setPreferredInstall",
+    ]);
+  });
+
+  it("getInstallSelection calls get_install_selection with no arguments", async () => {
+    const answer = selection({ status: "notDetected", installs: [], findings: [] });
+    const invoke = mockTauri({ get_install_selection: () => answer });
+    await expect(api.getInstallSelection()).resolves.toEqual(answer);
+    expect(invoke.mock.calls[0]?.[0]).toBe("get_install_selection");
+    expect(invoke.mock.calls[0]?.[1]).toEqual({});
+  });
+
+  it("setPreferredInstall sends exactly the choice, and nothing else", async () => {
+    const invoke = mockTauri({ set_preferred_install: () => selection({ status: "notDetected", installs: [], findings: [] }) });
+    for (const choice of ["automatic", "protocolHandler", "versionFolder"] as const) {
+      await api.setPreferredInstall(choice);
+    }
+    expect(invoke.mock.calls.map(([cmd, args]) => [cmd, args])).toEqual([
+      ["set_preferred_install", { choice: "automatic" }],
+      ["set_preferred_install", { choice: "protocolHandler" }],
+      ["set_preferred_install", { choice: "versionFolder" }],
+    ]);
+    expect(api.setPreferredInstall.length).toBe(1);
+  });
+
+  it("the type system refuses a missing or invented choice", () => {
+    // Never run: `tsc` checks that each line below is an error, which is the point.
+    const compileTimeOnly = () => {
+      // @ts-expect-error a choice is required
+      api.setPreferredInstall();
+      // @ts-expect-error null is not a choice
+      api.setPreferredInstall(null);
+      // @ts-expect-error not one of the three choices
+      api.setPreferredInstall("reset");
+    };
+    expect(compileTimeOnly).toBeTypeOf("function");
+  });
+
+  it("passes selection errors through untouched", async () => {
+    const conflict = { code: "conflict", message: "That Roblox source is not available right now. Check again." };
+    mockTauri({
+      set_preferred_install: () => {
+        throw conflict;
+      },
+    });
+    await expect(api.setPreferredInstall("versionFolder")).rejects.toEqual(conflict);
   });
 
   it("passes backend errors through untouched", async () => {
