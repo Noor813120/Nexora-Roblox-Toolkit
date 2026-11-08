@@ -215,26 +215,19 @@ every database command answers `unavailable`, and a banner and the Settings page
 
 ## Known limitations and unverified areas
 
-- **Windows verification:** The Windows GitHub Actions build and test workflow passed on commit
-  `8607635`. The later Phase 4 Milestone 2 changes have also passed the Rust and frontend test
-  suites on Windows locally, but those changes have not yet been verified by a subsequent CI run.
-- The Windows-only memory code (`GlobalMemoryStatusEx`) was compiled in the Windows build and its
-  Windows tests were executed as part of the Windows test run.
-- The UI has been viewed in headless Chromium (mocked backend) and in the real Tauri app under a
-  virtual display on Linux (WebKitGTK). It has not been manually checked in WebView2.
+- **Windows verification:** The Windows GitHub Actions build and test workflow passed on commit `800193f`. The Windows application was also manually tested for Phase 4 Milestone 2 on November 8, 2026.
+
+- The Windows-only memory code (`GlobalMemoryStatusEx`) was compiled in the Windows build and its Windows tests were executed as part of the Windows test run.
+
+- The UI has been viewed in headless Chromium (mocked backend) and in the real Tauri app under a virtual display on Linux (WebKitGTK). The Phase 4 Game Launcher card and preferred-installation workflow have been manually checked in the real Windows application using WebView2. The entire UI has not been comprehensively checked in WebView2.
+
 - The placeholder icon has not been replaced.
-- The database has been exercised by automated tests on Windows and in the real app on Linux.
-  However, the real app's Windows data-folder location (`%LOCALAPPDATA%`), file renaming over an
-  existing file, and the Windows save dialog's overwrite prompt remain unverified. Real backup and
-  restore through native dialogs have been exercised on Linux only.
-- **Preferred installation (Phase 4, Milestone 2), partially verified:**
-  - Its Rust and frontend tests have passed on Windows locally. The Milestone 2 changes have not
-    yet been run through GitHub Actions or tested on Linux.
-  - Fourteen malformed IPC requests were rejected through Tauri's mock IPC boundary without
-    changing the database. All three valid choices were also tested through the real command,
-    including their persisted results.
-  - The two live regions in the Game Launcher card (detection headline and preference status)
-    have been checked in tests for structure and persistence, but not with a screen reader.
-  - Restoring the preference on another computer was simulated with a second database and
-    made-up machines, not tested with a second physical computer.
-  - The manual run of Milestone 2 in the real app is pending.
+
+- The database has been exercised by automated tests on Windows and in the real app on Linux. However, the real app's Windows data-folder location (`%LOCALAPPDATA%`), file renaming over an existing file, and the Windows save dialog's overwrite prompt remain unverified. Real backup and restore through native dialogs have been exercised on Linux only.
+
+- **Preferred installation (Phase 4, Milestone 2):**
+  - Rust and frontend automated tests passed on Windows. GitHub Actions CI passed on commit `800193f`.
+  - Fourteen malformed IPC requests were rejected through Tauri's mock IPC boundary without changing the database. All three valid choices were also tested through the real command, including their persisted results.
+  - The real Windows application was manually tested on November 8, 2026. Application launch, Roblox detection, installation source/path reporting, preference selection, persistence after restart, and activity logging passed.
+  - The two live regions in the Game Launcher card have automated test coverage, but screen-reader announcements have not been manually tested.
+  - Restoring the preference on another computer was simulated with a second database and made-up machines, not tested with a second physical computer.
