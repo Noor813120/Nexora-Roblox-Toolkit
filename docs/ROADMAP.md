@@ -46,7 +46,7 @@ marked complete.
 
 - Milestone 1: read-only Roblox installation detection with a Game Launcher card (installs found, what was checked, "Check again"). Microsoft Store installs are reported as not checked. The detection result is not saved or logged.
 - Milestone 2: a saved preferred installation (the link handler's, the newest in the version folders, or automatic), compared with fresh detection and shown with its state. Changes are saved explicitly and logged; there is no schema change. Details: [ARCHITECTURE.md](ARCHITECTURE.md#preferred-installation-phase-4-milestone-2).
-- Tests: 251 Rust passed, 1 ignored; 189 frontend passed. GitHub Actions CI passed for commit `800193f`.
+- Tests: 251 Rust passed, 1 ignored; 189 frontend passed in three consecutive local full-suite runs. GitHub Actions run #4 for commit `9daaf64` initially failed on the Settings preference test, but its rerun passed on both Windows and Ubuntu (189/189 frontend tests on each platform). The cause of the original failure remains undetermined.
 - Milestone 2 manual Windows checks (November 8, 2026): application launch, Roblox detection, installation source/path reporting, preferred source selection, persistence after restart, and activity logging passed.
 - Screen-reader announcements: not tested.
 - Not built on purpose: launching Roblox, process discovery, sessions and the launch queue.
@@ -72,4 +72,4 @@ marked complete.
   be protected per field in Phase 8.
 - Phase 3 Windows checks: location, backup and restore dialogs, and WAL behaviour next to antivirus.
 - Screen-reader testing of the Game Launcher card live regions remains outstanding.
-- The Settings page asynchronous-save test was stabilized with `waitFor` and CI test configuration changes. The underlying cause of the earlier intermittent failure has not been established.
+- The Settings asynchronous-save test has an intermittent CI failure history. The isolated test, complete Settings test file, and three consecutive local frontend runs passed. GitHub Actions run #4 initially failed, but rerunning the same commit passed on Windows and Ubuntu. The original failure cause remains unknown.

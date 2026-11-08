@@ -215,7 +215,7 @@ every database command answers `unavailable`, and a banner and the Settings page
 
 ## Known limitations and unverified areas
 
-- **Windows verification:** The Windows GitHub Actions build and test workflow passed on commit `800193f`. The Windows application was also manually tested for Phase 4 Milestone 2 on November 8, 2026.
+- **Windows verification:** GitHub Actions passed on commit `800193f`. Run #4 for `9daaf64` initially failed on an intermittent Settings preference test; rerunning the same commit passed on Windows and Ubuntu, with 189/189 frontend tests on each platform. The original failure cause remains unknown. The Windows application was also manually tested for Phase 4 Milestone 2 on November 8, 2026.
 
 - The Windows-only memory code (`GlobalMemoryStatusEx`) was compiled in the Windows build and its Windows tests were executed as part of the Windows test run.
 
@@ -226,7 +226,7 @@ every database command answers `unavailable`, and a banner and the Settings page
 - The database has been exercised by automated tests on Windows and in the real app on Linux. However, the real app's Windows data-folder location (`%LOCALAPPDATA%`), file renaming over an existing file, and the Windows save dialog's overwrite prompt remain unverified. Real backup and restore through native dialogs have been exercised on Linux only.
 
 - **Preferred installation (Phase 4, Milestone 2):**
-  - Rust and frontend automated tests passed on Windows. GitHub Actions CI passed on commit `800193f`.
+  - Rust and frontend automated tests passed on Windows. GitHub Actions passed on commit `800193f`; run #4 for `9daaf64` initially failed on the Settings preference test, but its rerun passed on both Windows and Ubuntu (189/189 frontend tests on each). The original failure cause remains unknown.
   - Fourteen malformed IPC requests were rejected through Tauri's mock IPC boundary without changing the database. All three valid choices were also tested through the real command, including their persisted results.
   - The real Windows application was manually tested on November 8, 2026. Application launch, Roblox detection, installation source/path reporting, preference selection, persistence after restart, and activity logging passed.
   - The two live regions in the Game Launcher card have automated test coverage, but screen-reader announcements have not been manually tested.
