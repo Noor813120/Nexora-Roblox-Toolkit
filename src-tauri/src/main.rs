@@ -57,6 +57,7 @@ fn main() {
             commands::roblox::detect_roblox,
             commands::roblox::get_install_selection,
             commands::roblox::set_preferred_install,
+            commands::launcher::get_running_roblox_clients,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Nexora");

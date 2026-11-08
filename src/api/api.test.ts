@@ -98,10 +98,11 @@ describe("roblox service", () => {
     expect(api.getInstallSelection.length).toBe(0);
     // The whole Roblox surface: nothing here takes a path, a command or a program to run.
     expect(Object.keys(api).filter((k) => /roblox|install|launch/i.test(k))).toEqual([
-      "detectRoblox",
-      "getInstallSelection",
-      "setPreferredInstall",
-    ]);
+  "detectRoblox",
+  "getInstallSelection",
+  "setPreferredInstall",
+  "getRunningRobloxClients",
+]);
   });
 
   it("getInstallSelection calls get_install_selection with no arguments", async () => {
