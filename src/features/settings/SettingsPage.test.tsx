@@ -35,8 +35,14 @@ describe("Preferences (persisted settings)", () => {
     render(<SettingsPage />);
     const input = await within(card("Preferences")).findByLabelText("Keep activity history for");
     const save = screen.getByRole("button", { name: "Save Keep activity history for" });
+
     fireEvent.change(input, { target: { value: "90" } });
-    expect(save).toBeEnabled();
+
+    await waitFor(() => {
+      expect(input).toHaveValue(90);
+      expect(save).toBeEnabled();
+    });
+
     fireEvent.click(save);
     expect(await screen.findByText("Saved.")).toBeInTheDocument();
     const call = invoke.mock.calls.find(([c]) => c === "set_setting");

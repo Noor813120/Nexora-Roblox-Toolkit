@@ -1279,17 +1279,25 @@ mod tests {
         .unwrap();
     }
 
-    /// Sends malformed requests to the real `set_preferred_install` through Tauri's own argument
-    /// handling (mock runtime). Each must be rejected before the command body runs, so nothing in a
-    /// seeded temporary database may change. The error text is Tauri's and is not asserted.
+    /// Test-only IPC command using a deterministic Roblox environment.
+    #[tauri::command]
+    fn test_set_preferred_install(
+        state: State<'_, DbState>,
+        choice: InstallChoice,
+    ) -> Result<InstallSelection, AppError> {
+        let env = good_machine();
+        let db = state.database().cloned();
+
+        apply_with(&env, db.as_deref(), choice.into_target(), now_ms())
+    }
+
     #[test]
     fn malformed_ipc_requests_are_rejected_and_change_nothing() {
         use tauri::Manager;
         use tauri::ipc::{CallbackFn, InvokeBody};
         use tauri::test::{INVOKE_KEY, get_ipc_response, mock_builder, mock_context, noop_assets};
         use tauri::webview::InvokeRequest;
-
-        // Declared first, so it is dropped last (see the known limit at the end of this test).
+        // Declared first, so it is dropped last.
         let dir = TempDir::new();
         let state = crate::commands::database::init_state(&dir.path().join("ipc.db"), 1_000);
         let db = state
@@ -1298,7 +1306,7 @@ mod tests {
             .expect("the temporary database opens");
         seed_existing_data(&db);
         let before = full_snapshot(&db);
-        // Our seeded rows are there, on top of the entries opening the database wrote itself.
+
         let rows_of = |table: &str| before.iter().filter(|r| r.starts_with(table)).count();
         assert_eq!(rows_of("settings:"), 3, "{before:#?}");
         assert!(rows_of("activity_logs:") > 3, "{before:#?}");
@@ -1311,7 +1319,7 @@ mod tests {
 
         let app = mock_builder()
             .invoke_handler(tauri::generate_handler![
-                crate::commands::roblox::set_preferred_install,
+                test_set_preferred_install,
                 boundary_control
             ])
             .build(mock_context(noop_assets()))
@@ -1383,7 +1391,7 @@ mod tests {
             ),
         ];
         for (name, body) in rejected {
-            let response = send("set_preferred_install", body);
+            let response = send("test_set_preferred_install", body);
             assert!(response.is_err(), "{name}: the request was accepted");
             assert_eq!(full_snapshot(&db), before, "{name}: the database changed");
         }
@@ -1398,7 +1406,7 @@ mod tests {
 
         for (choice, expected) in valid_choices {
             let response = send(
-                "set_preferred_install",
+                "test_set_preferred_install",
                 InvokeBody::Json(json!({"choice": choice})),
             );
 
