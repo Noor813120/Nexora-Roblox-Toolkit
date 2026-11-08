@@ -21,6 +21,10 @@ tauri-plugin-dialog = "2"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = ["Win32_System_SystemInformation", "Win32_System_Registry"] }
 
+[dev-dependencies]
+# Only for the IPC boundary test: the mock runtime and `get_ipc_response`. No new crates.
+tauri = { version = "2", features = ["test"] }
+
 [profile.dev]
 debug = "line-tables-only"
 

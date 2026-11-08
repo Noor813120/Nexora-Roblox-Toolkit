@@ -35,11 +35,11 @@ Windows APIs   (all cfg(windows) code, only under platform/)
 
 | Module | Purpose | Phase | State |
 |---|---|---|---|
-| `commands/` | The IPC surface. Typed request/response, validation, `AppError`. | 1+ | `app_info`, `system_info`, 18 database commands (`commands/database.rs`) and `detect_roblox` (`commands/roblox.rs`) |
+| `commands/` | The IPC surface. Typed request/response, validation, `AppError`. | 1+ | `app_info`, `system_info`, 18 database commands (`commands/database.rs`) and three Roblox commands (`commands/roblox.rs`): `detect_roblox`, `get_install_selection`, `set_preferred_install` |
 | `error.rs` | `AppError` serialized as `{ code, message }`; codes `invalid`, `not_found`, `conflict`, `unavailable`, `internal`. | 1, 3 | done, tested, returned by every database command |
 | `platform/` | Thin OS wrappers; the only place for `cfg(windows)`. | 1, 2, 4 | `os`, `arch`, `logical_cores`, `memory_status`, and the read-only Roblox probes (`platform/roblox.rs`) |
 | `storage/` | SQLite: connection, migrations, settings, profiles, automation profiles, activity log, backup and restore. | 3 | done on Linux; see [DATABASE.md](DATABASE.md) |
-| `launcher/` | Process discovery, launching, sessions, queue. | 4 | Milestone 1 only: read-only Roblox installation detection (`launcher/roblox.rs`). It decides what the evidence means and is testable on any OS; `platform/roblox.rs` reads folders, file metadata and one registry value. An install means a non-empty regular file at an expected path; contents are not checked, so it is not proof of genuine Roblox. Anything unreadable or not understood gives "inconclusive", never "not detected"; a version-named link in the Versions folder is never followed and makes the folder listing incomplete. It never runs the registry command, starts a process or uses the network, and its result is not saved or logged. Microsoft Store installs are reported as not checked. |
+| `launcher/` | Process discovery, launching, sessions, queue. | 4 | Milestones 1 and 2. Milestone 1: read-only Roblox installation detection (`launcher/roblox.rs`). It decides what the evidence means and is testable on any OS; `platform/roblox.rs` reads folders, file metadata and one registry value. An install means a non-empty regular file at an expected path; contents are not checked, so it is not proof of genuine Roblox. Anything unreadable or not understood gives "inconclusive", never "not detected"; a version-named link in the Versions folder is never followed and makes the folder listing incomplete. It never runs the registry command, starts a process or uses the network, and the detection result itself is not saved or logged. Microsoft Store installs are reported as not checked. Milestone 2 adds the saved preferred installation (`launcher/preference.rs`; see [Preferred installation](#preferred-installation-phase-4-milestone-2)). Nothing in `launcher/` launches anything yet. |
 | `automation/` | Auto-join, recovery state machine, retries, cancellation. | 5 | empty |
 | `scripts/` | Script Hub: import, external execution, Luau editing. | 6 | empty |
 | `monitoring/` | RAM/CPU sampling, adaptive intervals, Resource Guard. | 7 | empty |
@@ -51,12 +51,65 @@ Windows APIs   (all cfg(windows) code, only under platform/)
 |---|---|---|
 | `app_info` | `AppInfo { name, version, platform, arch }` | Static facts about the build. |
 | `system_info` | `SystemInfo { logicalCores: number \| null, memory: MemoryInfo \| null }` | A snapshot read once per call. `memory` (`totalBytes`, `usedBytes`, `availableBytes`) comes from `GlobalMemoryStatusEx` on Windows and is `null` everywhere else. `null` means "unavailable"; the UI must never show a made-up number. |
+| `detect_roblox` | `RobloxDetection { status, installs, findings }` | Read-only. No input and no database state; the result is not saved or logged. |
+| `get_install_selection` | `InstallSelection { detection, preference, availableSources }` | Read-only. One detection, the saved preference compared against it, and the sources that could be chosen right now. `preference` is `null` when preference storage is unavailable or the saved preference cannot be read; this is not the same as "automatic". |
+| `set_preferred_install` | `InstallSelection` | The only command that changes the preference. Argument: a required `choice` (`automatic`, `protocolHandler` or `versionFolder`), never a path. Saves and logs it in one transaction. Answers `conflict` if that source cannot be chosen right now or the system is not Windows; `automatic` is always allowed. |
 
-Neither of those two takes input or exposes handles, paths or credentials. The TypeScript types are
-generated from the Rust structs (`npm run bindings`) into `src/api/bindings/`.
+None of these takes a path, a program or a credential, and none exposes a handle. The TypeScript
+types are generated from the Rust structs (`npm run bindings`) into `src/api/bindings/`.
 
 The database commands (settings, profiles, automation profiles, activity logs, status, backup,
 restore) are listed in [DATABASE.md](DATABASE.md#ipc-commands). None accepts SQL or a file path.
+
+### Preferred installation (Phase 4, Milestone 2)
+
+The user can choose which kind of Roblox installation Nexora should prefer: the one the Windows
+`roblox-player` link handler points to (`protocolHandler`), the newest one in Roblox's version
+folders (`versionFolder`), or `automatic` (detection's first install). Nothing here launches Roblox.
+
+Three things are kept apart:
+
+- **Detection** (`launcher/roblox.rs`) says what exists on this computer. Milestone 2 does not change it.
+- **The stored preference** is a source kind, never a path, because Roblox replaces its version
+  folders on every update. It is one setting, `launcher.preferred_install`, holding
+  `{"v":1,"source":"..."}`; no row means automatic. No migration was needed
+  ([DATABASE.md](DATABASE.md#the-preferred-installation-setting)).
+- **Resolution** (`launcher/preference.rs`, pure functions, no disk access) compares the two afresh
+  every time and reports one of six states: automatic, available, unavailable, inconclusive,
+  unsupported, invalid. A stored preference is never proof that an installation exists.
+
+Rules:
+
+- A preference that cannot be resolved is reported as such. It never falls back to another
+  installation; only "automatic" uses detection's first install.
+- `versionFolder` means the newest `RobloxPlayerBeta.exe` inside a version folder, including the
+  folder the link handler points to. The pick is deterministic: newest file date first, unknown dates
+  last, then the folder name (ASCII-lowercased, then as written), then the path, then the source
+  (link handler before version folders), so it never depends on the order detection listed things
+  in. With several candidates the screen shows "1 of N".
+- "Could not be checked" is never reported as "not there". A source with no installs is
+  *unavailable* only after a clean "no" from that source's own checks, otherwise *inconclusive*, and
+  one unreadable source does not hide the other.
+- A stored value that cannot be used is left exactly as it is and reported: *invalid* (not something
+  this version wrote), or *unsupported* (written by a newer version, naming a source that cannot be
+  preferred, or saved on a system where it cannot be used). Only an explicit choice by the user
+  replaces it.
+- `availableSources` lists the sources whose choice would be accepted right now, which is the rule
+  `set_preferred_install` applies, in a fixed order. The screen offers only those, plus "Automatic",
+  which is always allowed and always offered.
+- `set_preferred_install` detects once (not at all if the database is unavailable), before it takes
+  the database lock, rejects a source that is not available, then changes the setting and writes the
+  activity entry in one transaction (both or neither). Choosing what is already chosen, however it
+  is spelled in storage, writes and logs nothing.
+- Detection is a point-in-time observation. Anything that later acts on it (launching, in a future
+  milestone) must check again immediately before acting.
+
+In the Game Launcher card, the preference panel shows the state, the options that can be chosen and an
+explicit "Save choice". After a save, the card re-reads the whole selection and shows what the backend
+now says; it does not trust the save reply. If the preference cannot be read the whole control is
+disabled and is not shown as "automatic". A saved source that is not available stays selected but
+disabled; a stored value this version cannot read or use (invalid, from a newer version, or naming a
+source that cannot be preferred) leaves no option selected, and "Automatic" can replace it.
 
 ## Frontend (`src/`)
 
@@ -135,6 +188,8 @@ operating system asks for reduced motion. One focus ring (2px accent) is used ev
 | Plain SQLite via rusqlite, whole file not encrypted *(done, Phase 3)* | Avoids compiling OpenSSL for SQLCipher; the file holds ordinary configuration, and secrets will be protected per field (Phase 8). Details and the rusqlite-versus-SQLx comparison in [DATABASE.md](DATABASE.md). |
 | Database work on blocking threads, one connection | Disk access never runs on the async runtime or the UI thread; one connection behind a mutex is the simplest safe model for one user and tiny queries. |
 | The frontend never supplies a file path | Backup and restore open the native file dialog from Rust, so React cannot point the backend at arbitrary files. |
+| Preferred installation stored as a source kind, never a path *(done, Phase 4)* | Roblox replaces its version folders on every update, so a stored path would go stale. |
+| Detection runs once (not at all without a database), before the database lock *(done, Phase 4)* | File and registry reads never hold up the database, and a choice is checked against what is on the computer right now. |
 | Vitest + Testing Library + jsdom for frontend tests | Reuses the Vite config; four dev-only dependencies, none in the shipped app. |
 | Edition 2024, `panic = "abort"`, LTO, `opt-level = "s"` in release | Smaller, faster binary. |
 
@@ -158,12 +213,28 @@ every database command answers `unavailable`, and a banner and the Settings page
 
 ## Not done / unknown
 
-- **No Windows verification.** Everything was built and tested on Linux. The Windows-only memory
-  code (`GlobalMemoryStatusEx`) has never been compiled or run: its signature and struct fields were
-  checked against the `windows` crate source only, and its Windows-only test has not been executed.
+## Known limitations and unverified areas
+
+- **Windows verification:** The Windows GitHub Actions build and test workflow passed on commit
+  `8607635`. The later Phase 4 Milestone 2 changes have also passed the Rust and frontend test
+  suites on Windows locally, but those changes have not yet been verified by a subsequent CI run.
+- The Windows-only memory code (`GlobalMemoryStatusEx`) was compiled in the Windows build and its
+  Windows tests were executed as part of the Windows test run.
 - The UI has been viewed in headless Chromium (mocked backend) and in the real Tauri app under a
-  virtual display on Linux (WebKitGTK). It has not been seen in WebView2.
+  virtual display on Linux (WebKitGTK). It has not been manually checked in WebView2.
 - The placeholder icon has not been replaced.
-- The database layer has never run on Windows. The data-folder location (`%LOCALAPPDATA%`), file
-  renaming over an existing file, and the Windows save dialog's overwrite prompt are unverified. The
-  real app, with real backup and restore through native dialogs, was exercised on Linux only.
+- The database has been exercised by automated tests on Windows and in the real app on Linux.
+  However, the real app's Windows data-folder location (`%LOCALAPPDATA%`), file renaming over an
+  existing file, and the Windows save dialog's overwrite prompt remain unverified. Real backup and
+  restore through native dialogs have been exercised on Linux only.
+- **Preferred installation (Phase 4, Milestone 2), partially verified:**
+  - Its Rust and frontend tests have passed on Windows locally. The Milestone 2 changes have not
+    yet been run through GitHub Actions or tested on Linux.
+  - Fourteen malformed IPC requests were rejected through Tauri's mock IPC boundary without
+    changing the database. All three valid choices were also tested through the real command,
+    including their persisted results.
+  - The two live regions in the Game Launcher card (detection headline and preference status)
+    have been checked in tests for structure and persistence, but not with a screen reader.
+  - Restoring the preference on another computer was simulated with a second database and
+    made-up machines, not tested with a second physical computer.
+  - The manual run of Milestone 2 in the real app is pending.

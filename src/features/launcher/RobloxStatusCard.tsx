@@ -100,7 +100,7 @@ function FindingItem({ finding }: { finding: Finding }) {
   );
 }
 
-/** The one-line answer. It lives inside the card's always-present live region. */
+/** The one-line answer, shown on screen. Its spoken form is the card's status sentence. */
 function Headline({ detection, checkedAt }: { detection: RobloxDetection; checkedAt: number }) {
   const status = STATUS[detection.status];
   return (
@@ -147,18 +147,44 @@ export function RobloxStatusCard() {
   const { state, reload, refreshing } = useBackend(api.getInstallSelection);
   // A check is already running (first load or "Check again"): do not start another.
   const busy = refreshing || state.status === "loading";
+  // What a screen reader says, as one whole sentence in one text node. It differs from the visible
+  // wording on purpose (punctuation or phrasing), so the two are never mistaken for each other.
+  // It also changes while a check runs, so a finished check is announced even when it ends in the
+  // same second as the last one. A failed read is announced by its own alert below.
+  const announcement =
+    state.status === "loading"
+      ? "Looking for Roblox."
+      : state.status === "offline"
+        ? "Roblox cannot be checked outside the Nexora window."
+        : state.status === "ready"
+          ? refreshing
+            ? "Checking for Roblox again."
+            : `Roblox check finished at ${formatClock(state.at)}: ${STATUS[state.data.detection.status].label}.`
+          : "";
   return (
     <Card
       title="Roblox installation"
       actions={
-        <Button onClick={reload} disabled={busy || state.status === "offline"}>
+        // While a check runs the button stays focusable (aria-disabled, not disabled), so keyboard
+        // focus is not dropped; a press is ignored. Offline there is nothing to check, so it is
+        // genuinely disabled.
+        <Button
+          onClick={busy ? undefined : reload}
+          disabled={state.status === "offline"}
+          aria-disabled={busy || undefined}
+          className={busy ? "cursor-not-allowed opacity-50" : ""}
+        >
           <RefreshCw aria-hidden="true" className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
           {refreshing ? "Checking…" : "Check again"}
         </Button>
       }
     >
-      {/* Always mounted, so screen readers announce what changes inside it. */}
-      <div aria-live="polite">
+      {/* Always mounted, so screen readers announce it whenever the sentence changes. Only this
+          and the installation panel's own region are live; the text below is not. */}
+      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {announcement}
+      </p>
+      <div>
         {state.status === "loading" && <p className="text-sm text-muted">Looking for Roblox…</p>}
         {state.status === "offline" && (
           <p className="text-sm text-muted">Roblox detection only works inside the Nexora window.</p>

@@ -1208,4 +1208,227 @@ mod tests {
             assert_eq!(choice.into_target(), target);
         }
     }
+
+    // ---- the IPC boundary ----
+
+    /// A harmless command with the same argument shape. It only proves the harness delivers
+    /// well-formed requests, so "rejected" below cannot mean "nothing is ever delivered".
+    #[tauri::command]
+    fn boundary_control(choice: String) -> usize {
+        choice.len()
+    }
+
+    /// Every column of every row of the two tables the command could touch, tagged by table.
+    fn full_snapshot(db: &Database) -> Vec<String> {
+        db.with(|c| {
+            let mut out = Vec::new();
+            for (table, sql) in [
+                ("settings", "SELECT * FROM settings ORDER BY id"),
+                ("activity_logs", "SELECT * FROM activity_logs ORDER BY id"),
+            ] {
+                let mut stmt = c.prepare(sql)?;
+                let columns = stmt.column_count();
+                let mut rows = stmt.query([])?;
+                while let Some(row) = rows.next()? {
+                    let cells = (0..columns)
+                        .map(|i| {
+                            row.get_ref(i).map(|v| match v {
+                                rusqlite::types::ValueRef::Text(t) => {
+                                    format!("{:?}", String::from_utf8_lossy(t))
+                                }
+                                other => format!("{other:?}"),
+                            })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    out.push(format!("{table}: {}", cells.join(" | ")));
+                }
+            }
+            Ok(out)
+        })
+        .unwrap()
+    }
+
+    /// Existing data the command must leave alone, including a saved preference: choosing
+    /// "automatic" would delete it and log a change, so a request that wrongly got through as
+    /// "automatic" shows up in the snapshot (it would be invisible against empty tables).
+    fn seed_existing_data(db: &Database) {
+        db.with(|c| {
+            for (key, value, created, updated) in [
+                ("activity.retention_days", "30", 100_i64, 200_i64),
+                ("ui.dashboard_activity_count", "8", 110, 210),
+                (SETTING_KEY, canonical(VF).as_str(), 120, 220),
+            ] {
+                c.execute(
+                    "INSERT INTO settings (key, value, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+                    rusqlite::params![key, value, created, updated],
+                )?;
+            }
+            for (event, severity, message, metadata, created) in [
+                ("app.started", "info", "Nexora 0.1.0 started.", None, 300_i64),
+                (EVENT_TYPE, "info", SET_VF, Some(r#"{"from":"automatic","to":"versionFolder"}"#), 310),
+                ("database.cleaned_up", "warning", "Removed 3 old entries.", Some(r#"{"removed":3}"#), 320),
+            ] {
+                c.execute(
+                    "INSERT INTO activity_logs (event_type, severity, message, metadata_json, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    rusqlite::params![event, severity, message, metadata, created],
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    /// Sends malformed requests to the real `set_preferred_install` through Tauri's own argument
+    /// handling (mock runtime). Each must be rejected before the command body runs, so nothing in a
+    /// seeded temporary database may change. The error text is Tauri's and is not asserted.
+    #[test]
+    fn malformed_ipc_requests_are_rejected_and_change_nothing() {
+        use tauri::Manager;
+        use tauri::ipc::{CallbackFn, InvokeBody};
+        use tauri::test::{INVOKE_KEY, get_ipc_response, mock_builder, mock_context, noop_assets};
+        use tauri::webview::InvokeRequest;
+
+        // Declared first, so it is dropped last (see the known limit at the end of this test).
+        let dir = TempDir::new();
+        let state = crate::commands::database::init_state(&dir.path().join("ipc.db"), 1_000);
+        let db = state
+            .database()
+            .cloned()
+            .expect("the temporary database opens");
+        seed_existing_data(&db);
+        let before = full_snapshot(&db);
+        // Our seeded rows are there, on top of the entries opening the database wrote itself.
+        let rows_of = |table: &str| before.iter().filter(|r| r.starts_with(table)).count();
+        assert_eq!(rows_of("settings:"), 3, "{before:#?}");
+        assert!(rows_of("activity_logs:") > 3, "{before:#?}");
+        assert!(
+            before
+                .iter()
+                .any(|r| r.starts_with("settings:") && r.contains("versionFolder")),
+            "the saved preference is part of the snapshot"
+        );
+
+        let app = mock_builder()
+            .invoke_handler(tauri::generate_handler![
+                crate::commands::roblox::set_preferred_install,
+                boundary_control
+            ])
+            .build(mock_context(noop_assets()))
+            .expect("the mock app builds");
+        app.manage(state);
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("the mock webview builds");
+        let send = |cmd: &str, body: InvokeBody| {
+            get_ipc_response(
+                &webview,
+                InvokeRequest {
+                    cmd: cmd.into(),
+                    callback: CallbackFn(0),
+                    error: CallbackFn(1),
+                    url: if cfg!(windows) {
+                        "http://tauri.localhost"
+                    } else {
+                        "tauri://localhost"
+                    }
+                    .parse()
+                    .unwrap(),
+                    body,
+                    headers: Default::default(),
+                    invoke_key: INVOKE_KEY.to_string(),
+                },
+            )
+        };
+
+        // Control: a well-formed request to the harmless command is delivered and answered.
+        let control = send(
+            "boundary_control",
+            InvokeBody::Json(json!({"choice": "abc"})),
+        );
+        assert_eq!(
+            control.ok().and_then(|b| b.deserialize::<usize>().ok()),
+            Some(3)
+        );
+
+        let rejected: [(&str, InvokeBody); 14] = [
+            ("missing choice", InvokeBody::Json(json!({}))),
+            ("no body", InvokeBody::default()),
+            ("null body", InvokeBody::Json(Value::Null)),
+            ("array body", InvokeBody::Json(json!([]))),
+            ("choice null", InvokeBody::Json(json!({"choice": null}))),
+            (
+                "invented string",
+                InvokeBody::Json(json!({"choice": "reset"})),
+            ),
+            (
+                "wrong casing of a value",
+                InvokeBody::Json(json!({"choice": "Automatic"})),
+            ),
+            ("empty string", InvokeBody::Json(json!({"choice": ""}))),
+            ("number", InvokeBody::Json(json!({"choice": 1}))),
+            ("object", InvokeBody::Json(json!({"choice": {}}))),
+            ("array", InvokeBody::Json(json!({"choice": ["automatic"]}))),
+            (
+                "wrong key casing",
+                InvokeBody::Json(json!({"Choice": "automatic"})),
+            ),
+            (
+                "wrong key name",
+                InvokeBody::Json(json!({"source": "versionFolder"})),
+            ),
+            (
+                "invented string with an extra key",
+                InvokeBody::Json(json!({"choice": "reset", "extra": 1})),
+            ),
+        ];
+        for (name, body) in rejected {
+            let response = send("set_preferred_install", body);
+            assert!(response.is_err(), "{name}: the request was accepted");
+            assert_eq!(full_snapshot(&db), before, "{name}: the database changed");
+        }
+
+        // Still delivering well-formed requests after all of that.
+        // Valid choices must pass through real Tauri IPC and persist correctly.
+        let valid_choices = [
+            ("protocolHandler", Some(PH)),
+            ("versionFolder", Some(VF)),
+            ("automatic", None),
+        ];
+
+        for (choice, expected) in valid_choices {
+            let response = send(
+                "set_preferred_install",
+                InvokeBody::Json(json!({"choice": choice})),
+            );
+
+            assert!(
+                response.is_ok(),
+                "valid choice {choice} was rejected: {response:?}"
+            );
+
+            let expected_stored = expected.map(canonical);
+            assert_eq!(
+                stored(&db),
+                expected_stored,
+                "wrong persisted preference for {choice}"
+            );
+        }
+        let again = send(
+            "boundary_control",
+            InvokeBody::Json(json!({"choice": "abcd"})),
+        );
+        assert_eq!(
+            again.ok().and_then(|b| b.deserialize::<usize>().ok()),
+            Some(4)
+        );
+
+        // Release every handle this test holds on the database.
+        drop(webview);
+        drop(app);
+        drop(db);
+        // Known limit: on Windows the mock app keeps its managed database state open until the
+        // test process exits, so `dir` usually cannot be removed here and a small folder named
+        // `roalt-adv-test-*` stays in the temp directory. Nothing outside it is touched.
+    }
 }

@@ -165,8 +165,13 @@ The app never silently continues with a broken database: either it works, or the
 ## Activity history
 
 - Real events only. The app records: `app.started`, `database.migrated`, `database.recovered`,
-  `database.backup_created`, `database.restored`, `activity.cleared`, `activity.pruned`. Nothing is
-  pre-filled and there are no sample rows.
+  `database.backup_created`, `database.restored`, `activity.cleared`, `activity.pruned`,
+  `launcher.preferred_install_changed`. Nothing is pre-filled and there are no sample rows.
+- `launcher.preferred_install_changed` (Info) records a change to the preferred Roblox installation.
+  Its message names only the new choice, in words. Its metadata holds the old and the new choice as
+  `{"from":…,"to":…}`, each one of `automatic`, `protocolHandler` or `versionFolder`, plus
+  `unrecognised` as the old value when a stored value could not be read. Neither ever contains a path
+  or any stored text. It is written in the same transaction as the change itself.
 - **Bounded three ways:** at most **10,000** rows (older rows are dropped inside the same transaction
   as each insert; one indexed delete, no counting), entries older than the retention setting
   (default 30 days) are removed at startup, and a list call returns at most **200** rows.
@@ -184,6 +189,34 @@ The app never silently continues with a broken database: either it works, or the
 A setting never saved reads as its default; `delete_setting` resets it. Saving a value identical to
 the stored one writes nothing. A stored value that no longer passes the rules (hand-edited file) is
 ignored in favour of the default and noted in the log.
+
+### The preferred installation setting
+
+The table also holds one setting that is deliberately **not** in the registry above:
+`launcher.preferred_install`.
+
+- Value: `{"v":1,"source":"protocolHandler"}` or `{"v":1,"source":"versionFolder"}`. No row means
+  "automatic". It names a kind of source, never a path.
+- Only `set_preferred_install` writes it. `get_setting`, `set_setting`, `delete_setting` and
+  `list_settings` cannot reach it: an unregistered key is rejected and never listed.
+- It is read with a bounded parser (values over 256 bytes are not parsed). A stored value that cannot
+  be used is left untouched and reported. It is "invalid" when it is not something this version wrote
+  (bad JSON, the wrong shape, an unknown source name, too long), and "unsupported" when it was written
+  by a newer version (`v` above 1), names a source that cannot be preferred (`microsoftStore` or
+  `platform`), or is a valid source saved on a system where it cannot be used. Only the user's
+  explicit choice replaces it.
+- No migration was needed; the schema stays at version 1.
+- A backup carries it and a restore brings it back byte for byte. Because only a source kind is
+  stored, a restored preference is judged against the installations on the computer it lands on: a
+  missing source is reported as unavailable and is never silently replaced. (Tested with a second
+  database and made-up machines, not with a second computer.)
+
+Changing it and logging it is one step. `settings::change_raw_logged` takes a write transaction before
+it reads, reads the stored value, lets the caller decide whether anything changes, writes or removes
+the setting, inserts the activity entry (applying the row cap) and commits. If any step fails, none of
+it is kept. If the caller decides nothing changes (the same choice again, in any equivalent spelling),
+nothing is written and nothing is logged. It refuses any key that is in the registry (those must go
+through `set_setting` so their range is checked), and it has one caller.
 
 ## Profiles and automation profiles
 
@@ -210,6 +243,11 @@ accepts SQL, and none accepts a file path.**
 | Automation profiles | `list_automation_profiles`, `create_automation_profile`, `update_automation_profile`, `delete_automation_profile` |
 | Activity | `list_activity_logs`, `create_activity_log`, `clear_old_activity_logs` |
 | Backup | `backup_database`, `restore_database` |
+
+Two further commands, `get_install_selection` and `set_preferred_install` (in `commands/roblox.rs`),
+read the preferred installation setting described above, and write it (together with its activity
+entry) when it changes. They are described in [ARCHITECTURE.md](ARCHITECTURE.md#ipc-commands).
+Neither accepts SQL or a path.
 
 ## Backup and restore
 
@@ -292,6 +330,14 @@ brought back, reopen, brand-new install, invalid files change nothing, older bac
 refused, failure mid-way rolls back, safety copies pruned); corruption handling (garbage file, damaged
 pages, someone else's SQLite file); startup bookkeeping and failure states.
 
+Phase 4 Milestone 2 added tests for the atomic change (rejected log entries, aborted inserts and
+failed row-cap pruning are each tested at the activity-log helper level, with a setting written in the
+same transaction; the first two are also tested through the settings change itself), the choice rules,
+the ordering of candidates over every permutation of a mixed set, the exact stored text and activity
+entries, backup and restore of the preference (including a value from a newer version, byte for
+byte), and concurrent writers on the one connection (each entry's "from" matches the previous "to").
+At the time of writing the whole Rust suite is 251 passing tests, with 1 ignored, run on Windows.
+
 The tests were also **checked for real strength by deliberately breaking the code** (skipping
 validation, allowing silent overwrite, removing the restore rollback, removing the log cap, always
 rewriting settings, turning foreign keys off, not clearing the old default): each break made tests fail.
@@ -325,3 +371,6 @@ state with backup and restore disabled.
 - A crash (not a normal exit) leaves a `-wal` file; SQLite recovers it on the next start (the
   persistence test restarts the app after a forced stop).
 - There is no logging framework yet (messages go to standard error).
+- The preferred-installation row is changed only through its command, but, like everything else in the
+  file, a person with access to `roalt.db` can edit it by hand. An unreadable value is reported and
+  kept, not repaired.

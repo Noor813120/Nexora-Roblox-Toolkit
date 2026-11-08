@@ -8,7 +8,7 @@ marked complete.
 | 1. Foundation | Repo audit, Tauri 2 + React + TypeScript project, Rust module layout, docs, Git, build | Done on Linux; Windows build unverified |
 | 2. User interface | Sidebar, navigation, dashboard, reusable components, design system, frontend tests | Done on Linux; Windows build unverified |
 | 3. Database | SQLite, schema, migrations, settings, profiles, activity logs, backup and restore | Done on Linux; Windows unverified |
-| 4. Launcher | Process discovery, Roblox launching, session tracking, launch queue | In progress: Milestone 1 (read-only installation detection) built; automated checks pass on Windows; manual app check completed |
+| 4. Launcher | Process discovery, Roblox launching, session tracking, launch queue | In progress: Milestone 1 (read-only installation detection) built; automated checks pass on Windows; manual app check completed. Milestone 2 (saved preferred installation, no launching) built; automated checks pass on Windows apart from one known intermittent frontend test (see below); manual app check pending |
 | 5. Automation | Auto-join, recovery state machine, retry management, cancellation, session monitoring | Not started |
 | 6. Script Hub | Import, external script execution, Luau editor, permissions, execution logs | Not started |
 | 7. Performance | RAM and CPU monitoring, adaptive polling, Resource Guard, benchmarks | Not started |
@@ -42,6 +42,20 @@ marked complete.
   automation, credential storage.
 - Full details: [DATABASE.md](DATABASE.md).
 
+## Phase 4: what exists so far
+
+- Milestone 1: read-only Roblox installation detection with a Game Launcher card (installs found, what
+  was checked, "Check again"). Microsoft Store installs are reported as not checked. The detection
+  result is not saved or logged.
+- Milestone 2: a saved preferred installation (the link handler's, the newest in the version folders,
+  or automatic), compared with fresh detection and shown with its state. Changes are saved explicitly
+  and logged; there is no schema change. Details:
+  [ARCHITECTURE.md](ARCHITECTURE.md#preferred-installation-phase-4-milestone-2).
+- Not built on purpose: launching Roblox, process discovery, sessions and the launch queue.
+- Tests, on Windows at the time of writing: 251 Rust passed, 1 ignored; 189 frontend passed. One frontend test (the Settings
+  page "saves a changed value" test) fails intermittently. It covers Phase 3 code that Milestone 2 did
+  not change, and its cause has not been established.
+
 ## Project decisions (from the project owner)
 
 - Several Roblox clients are supported. Duplicate protection flags duplicate **account + game**
@@ -63,3 +77,13 @@ marked complete.
   `%LOCALAPPDATA%\RoALT-Advanced`, and the database file is **not** encrypted as a whole; secrets will
   be protected per field in Phase 8.
 - Phase 3 Windows checks: location, backup and restore dialogs, and WAL behaviour next to antivirus.
+- Milestone 2 manual checks in the real app: the preference panel and saving, persistence across a
+  restart, the activity entries, and a screen-reader pass over the card's two live regions.
+- Run the Rust and frontend tests on Linux or in CI.
+- Investigate the intermittent Settings page test failure ("saves a changed value…"; the Save button
+  is observed disabled immediately after the value is changed). In working-tree testing, it failed
+  about 1 in 12 isolated runs and also failed intermittently in full-suite runs. A comparison of two
+  scratch copies outside the repository found 4 failures in 63 runs with the existing code and 0 in 51
+  runs with the Settings row's draft synchronisation rewritten as derived state. This points to the
+  `useEffect` in `PreferencesCard.tsx` as a possible area to investigate, but does not establish the
+  cause or mechanism. The Settings code remains unchanged.
