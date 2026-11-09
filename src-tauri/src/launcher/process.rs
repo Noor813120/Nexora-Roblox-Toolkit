@@ -10,6 +10,7 @@ use ts_rs::TS;
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum ProcessScanStatus {
+    #[allow(dead_code)] // Constructed only by the Windows implementation.
     Available,
     #[allow(dead_code)] // Constructed by the non-Windows implementation.
     Unsupported,
@@ -31,12 +32,15 @@ pub struct RunningRobloxClients {
     pub clients: Vec<RunningRobloxClient>,
 }
 
+#[cfg(any(windows, test))]
 const ROBLOX_PLAYER_EXE: &str = "RobloxPlayerBeta.exe";
 
+#[cfg(any(windows, test))]
 fn is_roblox_player_executable(name: &str) -> bool {
     name.eq_ignore_ascii_case(ROBLOX_PLAYER_EXE)
 }
 
+#[cfg(any(windows, test))]
 fn collect_matching_clients(
     entries: impl IntoIterator<Item = (u32, String)>,
 ) -> Vec<RunningRobloxClient> {
